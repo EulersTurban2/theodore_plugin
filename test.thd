@@ -1,9 +1,14 @@
-goal : Q
+goal : R
 
 assumption h1 : P -> Q
-assumption h2 : P
+assumption h2 : Q -> R
+assumption h3 : P
 
 proof
-ImplE h1
+ImplE h2 (
+  ImplE h1 (
+    Exact h3,
+    Exact h1
+  ),
   Exact h2
-  Exact h1
+)

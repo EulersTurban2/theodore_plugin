@@ -22,3 +22,5 @@ main = do
     if null result
     then putStrLn "Proof successful! Nothing left to prove."
     else putStrLn $ "Remaining subgoals:\n" ++ show result
+
+    genLatexTree proof goal

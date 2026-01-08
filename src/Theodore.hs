@@ -25,7 +25,6 @@ module Theodore
     , genLatexTree
     , parseFormula
     , parseAssumption
-    , splitSubproofs
     , parseProof
     , trim
     , indentLevel
@@ -33,9 +32,9 @@ module Theodore
 
 import FOL
 
-import qualified Data.List as List
 import Debug.Trace (trace)
-import Data.Char (isSpace)
+import Data.Char (isSpace, isAlpha, isAlphaNum)
+import qualified Data.List as List
 
 data Assumption = Assumption { name     :: String 
                              , formula  :: Formula }
@@ -85,6 +84,13 @@ data Proof = ToDo
            | ExisE  { mvar      :: String
                     , assmName  :: String
                     , proof     :: Proof }
+
+data Token
+    = TIdent String
+    | TLParen
+    | TRParen
+    | TComma
+    deriving (Show, Eq)
 
 
 instance Show Assumption where
@@ -488,6 +494,21 @@ indentLevel = length . takeWhile isSpace
 extractIndented :: [String] -> ([String], [String])
 extractIndented = span (\l -> indentLevel l > 0)
 
+tokenize :: String -> [Token]
+tokenize [] = []
+tokenize (c:cs)
+  | isSpace c = tokenize cs
+  | c == '('  = TLParen : tokenize cs
+  | c == ')'  = TRParen : tokenize cs
+  | c == ','  = TComma  : tokenize cs
+  | isAlpha c =
+      let (name, rest) = span (\x -> isAlphaNum x || x == '_') (c:cs)
+      in TIdent name : tokenize rest
+  | otherwise = error $ "Unexpected character: " ++ [c]
+
+expect :: Token -> [Token] -> [Token]
+expect t (x:xs) | t == x = xs
+expect t xs = error $ "Expected token: " ++ show t ++ ", got: " ++ show xs
 
 -- Parsing functions
 
@@ -538,35 +559,12 @@ parseTerm s
 parseTermList :: String -> [Term]
 parseTermList s = map parseTerm (splitCommaTopLevel s)
 
-parseProof :: [String] -> (Proof, [String])
-parseProof [] = error "Unexpected end of proof"
+parseProof :: String -> Proof
+parseProof s =
+  case parseProofTokens (tokenize s) of
+    (p, []) -> p
+    (_, ts) -> error ("Unconsumed tokens: " ++ show ts)
 
-parseProof (line : rest)
-  | "Exact" `List.isPrefixOf` trim line =
-      (Exact (drop 6 (trim line)), rest)
-
-  | "ImplE" `List.isPrefixOf` trim line =
-      let
-        name = drop 6 (trim line)
-        (p1Lines, rest1) = extractIndented rest
-        (p1, rest2) = parseProof p1Lines
-        (p2Lines, rest3) = extractIndented rest2
-        (p2, rest4) = parseProof p2Lines
-      in
-        (ImplE name p1 p2, rest4)
-
-  | otherwise = error ("Unknown proof line: " ++ line)
-
-
--- Split subproofs by indentation
-splitSubproofs :: Int -> [String] -> ([String], [String])
-splitSubproofs parentIndent = go [] []
-  where
-    go acc1 acc2 [] = (reverse acc1, reverse acc2)
-    go acc1 acc2 (l:ls)
-      | indentLevel l <= parentIndent = (reverse acc1, reverse acc2)
-      | null acc2 = go (l:acc1) acc2 ls
-      | otherwise = go acc1 (l:acc2) ls
 
 -- Collect lines that are indented
 collectIndented :: [String] -> ([String], [String])
@@ -575,3 +573,22 @@ collectIndented (l:ls)
     | "  " `List.isPrefixOf` l = let (collected, remaining) = collectIndented ls
                              in (drop 2 l : collected, remaining)  -- remove indentation
     | otherwise = ([], l:ls)
+
+
+parseProofTokens :: [Token] -> (Proof, [Token])
+parseProofTokens (TIdent "Exact" : TIdent name : rest) =
+    (Exact name, rest)
+
+parseProofTokens (TIdent "ImplI" : TIdent h : TLParen : rest) =
+    let (subproof, rest1) = parseProofTokens rest
+        rest2 = expect TRParen rest1
+    in (ImplI h subproof, rest2)
+
+parseProofTokens (TIdent "ImplE" : TIdent h : TLParen : rest) =
+    let (p1, rest1) = parseProofTokens rest
+        rest2 = expect TComma rest1
+        (p2, rest3) = parseProofTokens rest2
+        rest4 = expect TRParen rest3
+    in (ImplE h p1 p2, rest4)
+
+
