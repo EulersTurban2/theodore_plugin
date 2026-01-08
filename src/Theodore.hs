@@ -23,11 +23,19 @@ module Theodore
     , mkGoal
     , apply
     , genLatexTree
+    , parseFormula
+    , parseAssumption
+    , splitSubproofs
+    , parseProof
+    , trim
+    , indentLevel
     ) where
 
 import FOL
 
 import qualified Data.List as List
+import Debug.Trace (trace)
+import Data.Char (isSpace)
 
 data Assumption = Assumption { name     :: String 
                              , formula  :: Formula }
@@ -433,3 +441,137 @@ genLatexTree proof goal =
         putStr (latexTree proof goal)
         putStr "\\end{prooftree}\n"
     _   -> error "Invalid proof!"
+
+-- This part is added for parsing .thd files!
+
+-- =========================================
+-- User-friendly .thd assumption parser
+-- =========================================
+
+
+-- Helper functions
+trim :: String -> String
+trim = f.f
+    where f  = reverse . dropWhile isSpace
+
+parseQuantVar :: String -> (String, String)
+parseQuantVar s  =
+    let ws = words s
+    in case ws of
+        (v:rest) -> (v, unwords rest)
+        _        -> error "Invalid Quantifier"
+
+splitAtOperator :: String -> String -> (String, String)
+splitAtOperator op s = go 0 s ""
+  where
+    n = length op
+    go _ "" acc = error $ "Operator " ++ op ++ " not found in " ++ s
+    go depth rem@(c:cs) acc
+        | take n rem == op && depth == 0 = (acc, drop n rem)
+        | c == '(' = go (depth + 1) cs (acc ++ [c])
+        | c == ')' = go (depth - 1) cs (acc ++ [c])
+        | otherwise = go depth cs (acc ++ [c])
+
+splitCommaTopLevel :: String -> [String]
+splitCommaTopLevel s = go s 0 "" []
+  where
+    go [] _ acc res = res ++ [acc | not (null acc)]
+    go (c:cs) depth acc res
+        | c == ',' && depth == 0 = go cs depth "" (res ++ [acc])
+        | c == '(' = go cs (depth + 1) (acc ++ [c]) res
+        | c == ')' = go cs (depth - 1) (acc ++ [c]) res
+        | otherwise = go cs depth (acc ++ [c]) res
+
+indentLevel :: String -> Int
+indentLevel = length . takeWhile isSpace
+
+extractIndented :: [String] -> ([String], [String])
+extractIndented = span (\l -> indentLevel l > 0)
+
+
+-- Parsing functions
+
+parseAssumption :: String -> Assumption
+parseAssumption line = 
+    let rest = drop (length "assumption ") line
+        (namePart, formulaPart) = break (== ':') rest
+        name = trim namePart
+        formulaStr = trim (drop 1 formulaPart)
+    in Assumption name (parseFormula formulaStr)
+
+parseFormula :: String -> Formula
+parseFormula s
+    | "forall " `List.isPrefixOf` s =
+        let (v, rest) = parseQuantVar s
+        in Alls v (parseFormula rest)
+    | "exists " `List.isPrefixOf` s =
+        let (v, rest) = parseQuantVar s
+        in Exis v (parseFormula rest)
+    | "->" `List.isInfixOf` s =
+        let (l,r) = splitAtOperator "->" s
+        in Impl (parseFormula l) (parseFormula r)
+    | "&" `List.isInfixOf` s =
+        let (l,r) = splitAtOperator "&" s
+        in Conj (parseFormula l) (parseFormula r)
+    | "|" `List.isInfixOf` s =
+        let (l,r) = splitAtOperator "|" s
+        in Disj (parseFormula l) (parseFormula r)
+    | "~" `List.isPrefixOf` s = Neg (parseFormula (drop 1 s))
+    | otherwise = parseAtomic s
+
+parseAtomic :: String -> Formula
+parseAtomic s
+    | '(' `elem` s =
+        let (name, argsStr) = break (== '(') s
+            args = parseTermList (init (tail argsStr))
+        in Rel (trim name) args
+    | otherwise = Rel (trim s) []
+
+parseTerm :: String -> Term
+parseTerm s
+    | '(' `elem` s =
+        let (fname, argsStr) = break (== '(') s
+            args = parseTermList (init (tail argsStr))
+        in Fun (trim fname) args
+    | otherwise = Var (trim s)
+
+parseTermList :: String -> [Term]
+parseTermList s = map parseTerm (splitCommaTopLevel s)
+
+parseProof :: [String] -> (Proof, [String])
+parseProof [] = error "Unexpected end of proof"
+
+parseProof (line : rest)
+  | "Exact" `List.isPrefixOf` trim line =
+      (Exact (drop 6 (trim line)), rest)
+
+  | "ImplE" `List.isPrefixOf` trim line =
+      let
+        name = drop 6 (trim line)
+        (p1Lines, rest1) = extractIndented rest
+        (p1, rest2) = parseProof p1Lines
+        (p2Lines, rest3) = extractIndented rest2
+        (p2, rest4) = parseProof p2Lines
+      in
+        (ImplE name p1 p2, rest4)
+
+  | otherwise = error ("Unknown proof line: " ++ line)
+
+
+-- Split subproofs by indentation
+splitSubproofs :: Int -> [String] -> ([String], [String])
+splitSubproofs parentIndent = go [] []
+  where
+    go acc1 acc2 [] = (reverse acc1, reverse acc2)
+    go acc1 acc2 (l:ls)
+      | indentLevel l <= parentIndent = (reverse acc1, reverse acc2)
+      | null acc2 = go (l:acc1) acc2 ls
+      | otherwise = go acc1 (l:acc2) ls
+
+-- Collect lines that are indented
+collectIndented :: [String] -> ([String], [String])
+collectIndented [] = ([], [])
+collectIndented (l:ls)
+    | "  " `List.isPrefixOf` l = let (collected, remaining) = collectIndented ls
+                             in (drop 2 l : collected, remaining)  -- remove indentation
+    | otherwise = ([], l:ls)

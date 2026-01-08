@@ -1,0 +1,9 @@
+goal : Q
+
+assumption h1 : P -> Q
+assumption h2 : P
+
+proof
+ImplE h1
+  Exact h2
+  Exact h1
