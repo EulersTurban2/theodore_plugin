@@ -1,3 +1,6 @@
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
+
 module Theodore 
     ( Assumption ( Assumption )
     , Assumptions
@@ -28,6 +31,10 @@ module Theodore
     , parseProof
     , trim
     , indentLevel
+    , applyMacro
+    , parseMacroLine
+    , parseLemmaLine
+    , applyLemma
     ) where
 
 import FOL
@@ -86,11 +93,13 @@ data Proof = ToDo
                     , proof     :: Proof }
 
 data Token
-    = TIdent String
-    | TLParen
-    | TRParen
-    | TComma
+    = TAll | TEx | TEquiv | TOr | TAnd | TNeg | TImpl
+    | TTrue | TFalse
+    | TLParen | TRParen | TColon | TComma
+    | TIdent String
     deriving (Show, Eq)
+
+type Parser a = [Token] -> Maybe (a, [Token])
 
 
 instance Show Assumption where
@@ -228,13 +237,11 @@ free mvar (g : gs) = case (cncls g) of
 set :: String -> Goal -> Goal
 set mvar [] = error "Nothing to apply set to!"
 set mvar (g : gs) = case (cncls g) of
-    Exis x f    -> if (elem mvar (mvars g))
-                   then Subgoal
-                            (mvars g)
-                            (assms g)
-                            (substVar x mvar f)
-                      : gs
-                   else error "Invalid rule!"
+    Exis x f    -> Subgoal
+                       (mvars g)
+                       (assms g)
+                       (substVar x mvar f)
+                   : gs
     _           -> error "Invalid rule!"
 
 -- Apply conjE
@@ -325,10 +332,7 @@ turn assmName (g : gs)  = Subgoal
 -- Apply allE
 fix :: String -> String -> Goal -> Goal
 fix mvar assmName [] = error "Nothing to apply fix to!"
-fix mvar assmName (g : gs) = if elem mvar (mvars g) 
-                                then Subgoal (mvars g) (fix' (assms g)) (cncls g) 
-                                     : gs
-                                else error "Invalid meta var!"
+fix mvar assmName (g : gs) = Subgoal (mvars g) (fix' (assms g)) (cncls g) : gs
     where fix' [] = error "Invalid rule!"
           fix' (a : as) =
             if (name a) == assmName
@@ -454,12 +458,6 @@ genLatexTree proof goal =
 -- User-friendly .thd assumption parser
 -- =========================================
 
-
--- Helper functions
-trim :: String -> String
-trim = f.f
-    where f  = reverse . dropWhile isSpace
-
 parseQuantVar :: String -> (String, String)
 parseQuantVar s  =
     let ws = words s
@@ -494,101 +492,354 @@ indentLevel = length . takeWhile isSpace
 extractIndented :: [String] -> ([String], [String])
 extractIndented = span (\l -> indentLevel l > 0)
 
-tokenize :: String -> [Token]
-tokenize [] = []
-tokenize (c:cs)
-  | isSpace c = tokenize cs
-  | c == '('  = TLParen : tokenize cs
-  | c == ')'  = TRParen : tokenize cs
-  | c == ','  = TComma  : tokenize cs
-  | isAlpha c =
-      let (name, rest) = span (\x -> isAlphaNum x || x == '_') (c:cs)
-      in TIdent name : tokenize rest
-  | otherwise = error $ "Unexpected character: " ++ [c]
+lexer :: String -> [Token]
+lexer [] = []
+lexer (c:cs)
+    | isSpace c = lexer cs
+    | isAlpha c = 
+        -- Extract words that are alphanumeric + underscores
+        let (word, rest) = span (\x -> isAlphaNum x || x == '_') (c:cs)
+        in case word of
+            "All"   -> TAll   : lexer rest
+            "Ex"    -> TEx    : lexer rest
+            "True"  -> TTrue  : lexer rest
+            "False" -> TFalse : lexer rest
+            _       -> TIdent word : lexer rest
+    | otherwise = case (c:cs) of
+        ('<':'-':'>':rest) -> TEquiv : lexer rest
+        ('-':'>':rest)     -> TImpl  : lexer rest
+        ('&':rest)         -> TAnd   : lexer rest
+        ('|':rest)         -> TOr    : lexer rest
+        ('~':rest)         -> TNeg   : lexer rest
+        (':':rest)         -> TColon : lexer rest
+        ('(':rest)         -> TLParen : lexer rest
+        (')':rest)         -> TRParen : lexer rest
+        (',':rest)         -> TComma : lexer rest
+        _                  -> error ("Lexer error: Unexpected character '" ++ [c] ++ "'")
 
 expect :: Token -> [Token] -> [Token]
 expect t (x:xs) | t == x = xs
 expect t xs = error $ "Expected token: " ++ show t ++ ", got: " ++ show xs
 
--- Parsing functions
+-- Level 6: Equivalence (Lowest Precedence)
+parseEquiv :: Parser Formula
+parseEquiv tokens = do
+    (f1, rest) <- parseImpl tokens
+    case rest of
+        (TEquiv : rest') -> do
+            (f2, rest'') <- parseEquiv rest'
+            return (Eqiv f1 f2, rest'')
+        _ -> return (f1, rest)
 
+-- Level 5: Implication
+parseImpl :: Parser Formula
+parseImpl tokens = do
+    (f1, rest) <- parseDisj tokens
+    case rest of
+        (TImpl : rest') -> do
+            (f2, rest'') <- parseImpl rest'
+            return (Impl f1 f2, rest'')
+        _ -> return (f1, rest)
+
+-- Level 4: Disjunction
+parseDisj :: Parser Formula
+parseDisj tokens = do
+    (f1, rest) <- parseConj tokens
+    case rest of
+        (TOr : rest') -> do
+            (f2, rest'') <- parseDisj rest'
+            return (Disj f1 f2, rest'')
+        _ -> return (f1, rest)
+
+-- Level 3: Conjunction
+parseConj :: Parser Formula
+parseConj tokens = do
+    (f1, rest) <- parseUnary tokens
+    case rest of
+        (TAnd : rest') -> do
+            (f2, rest'') <- parseConj rest'
+            return (Conj f1 f2, rest'')
+        _ -> return (f1, rest)
+
+-- Level 2: Unary (Negation, Quantifiers)
+parseUnary :: Parser Formula
+parseUnary (TNeg : rest) = do
+    (f, rest') <- parseUnary rest
+    return (Neg f, rest')
+parseUnary (TAll : TIdent x : TColon : rest) = do
+    (f, rest') <- parseUnary rest
+    return (Alls x f, rest')
+parseUnary (TEx : TIdent x : TColon : rest) = do
+    (f, rest') <- parseUnary rest
+    return (Exis x f, rest')
+parseUnary tokens = parseAtom tokens
+
+-- Level 1: Atoms, Constants, and Parentheses (Highest Precedence)
+parseAtom :: Parser Formula
+parseAtom (TTrue : rest)  = Just (Top, rest)
+parseAtom (TFalse : rest) = Just (Bot, rest)
+parseAtom (TLParen : rest) = do
+    (f, rest') <- parseEquiv rest  -- Loop back up for stuff inside parens
+    case rest' of
+        (TRParen : rest'') -> Just (f, rest'')
+        _ -> Nothing
+parseAtom (TIdent name : TLParen : rest) = do
+    (args, rest') <- parseTerms rest
+    case rest' of
+        (TRParen : rest'') -> Just (Rel name args, rest'')
+        _ -> Nothing
+parseAtom (TIdent name : rest) = Just (Rel name [], rest)
+parseAtom _ = Nothing
+
+-- Term Parsers (for predicates like P(x, y))
+parseTerms :: Parser [Term]
+parseTerms tokens = do
+    (t, rest) <- parseTerm tokens
+    case rest of
+        (TComma : rest') -> do
+            (ts, rest'') <- parseTerms rest'
+            return (t : ts, rest'')
+        _ -> Just ([t], rest)
+
+parseTerm :: Parser Term
+parseTerm (TLParen : rest) = do
+    (t, rest1) <- parseTerm rest
+    case rest1 of
+        (TRParen : rest2) -> Just (t, rest2)
+        _ -> Nothing
+parseTerm (TIdent fname : TLParen : rest) = do
+    (args, rest') <- parseTerms rest
+    case rest' of
+        (TRParen : rest'') -> Just (Fun fname args, rest'')
+        _ -> Nothing
+parseTerm (TIdent x : rest) = Just (Var x, rest)
+parseTerm _ = Nothing
+
+
+-- The Main Entry Point for Formulas
+parseFormula :: String -> Formula
+parseFormula s = 
+    case parseEquiv (lexer s) of
+        Just (f, []) -> f
+        Just (_, ts) -> error ("Parse error. Unconsumed tokens: " ++ show ts ++ " in formula: " ++ s)
+        Nothing      -> error ("Failed to parse formula: " ++ s)
+
+-- The Updated Assumption Parser
 parseAssumption :: String -> Assumption
 parseAssumption line = 
     let rest = drop (length "assumption ") line
         (namePart, formulaPart) = break (== ':') rest
         name = trim namePart
-        formulaStr = trim (drop 1 formulaPart)
+        formulaStr = drop 1 formulaPart -- No need to trim formulaStr, lexer ignores spaces
     in Assumption name (parseFormula formulaStr)
 
-parseFormula :: String -> Formula
-parseFormula s
-    | "forall " `List.isPrefixOf` s =
-        let (v, rest) = parseQuantVar s
-        in Alls v (parseFormula rest)
-    | "exists " `List.isPrefixOf` s =
-        let (v, rest) = parseQuantVar s
-        in Exis v (parseFormula rest)
-    | "->" `List.isInfixOf` s =
-        let (l,r) = splitAtOperator "->" s
-        in Impl (parseFormula l) (parseFormula r)
-    | "&" `List.isInfixOf` s =
-        let (l,r) = splitAtOperator "&" s
-        in Conj (parseFormula l) (parseFormula r)
-    | "|" `List.isInfixOf` s =
-        let (l,r) = splitAtOperator "|" s
-        in Disj (parseFormula l) (parseFormula r)
-    | "~" `List.isPrefixOf` s = Neg (parseFormula (drop 1 s))
-    | otherwise = parseAtomic s
+-- The internal Recursive DEscent parser for Proofs
+parseE :: Parser Proof
 
-parseAtomic :: String -> Formula
-parseAtomic s
-    | '(' `elem` s =
-        let (name, argsStr) = break (== '(') s
-            args = parseTermList (init (tail argsStr))
-        in Rel (trim name) args
-    | otherwise = Rel (trim s) []
+-- ==========================================
+-- 1. Base Cases (Leaves)
+-- ==========================================
 
-parseTerm :: String -> Term
-parseTerm s
-    | '(' `elem` s =
-        let (fname, argsStr) = break (== '(') s
-            args = parseTermList (init (tail argsStr))
-        in Fun (trim fname) args
-    | otherwise = Var (trim s)
+parseE (TIdent "Exact" : TIdent h : rest) = Just (Exact h, rest)
+parseE (TIdent "ToDo" : rest)             = Just (ToDo, rest)
 
-parseTermList :: String -> [Term]
-parseTermList s = map parseTerm (splitCommaTopLevel s)
+-- ==========================================
+-- 2. Rules with 1 Sub-proof
+-- Syntax: RuleName [AssmName] "(" E ")"
+-- ==========================================
+
+parseE (TIdent "ImplI" : TIdent h : TLParen : rest) = do
+    (p, rest1) <- parseE rest
+    case rest1 of (TRParen : rest2) -> Just (ImplI h p, rest2); _ -> Nothing
+
+parseE (TIdent "ConjE" : TIdent h : TLParen : rest) = do
+    (p, rest1) <- parseE rest
+    case rest1 of (TRParen : rest2) -> Just (ConjE h p, rest2); _ -> Nothing
+
+parseE (TIdent "DisjlI" : TLParen : rest) = do
+    (p, rest1) <- parseE rest
+    case rest1 of (TRParen : rest2) -> Just (DisjlI p, rest2); _ -> Nothing
+
+parseE (TIdent "DisjrI" : TLParen : rest) = do
+    (p, rest1) <- parseE rest
+    case rest1 of (TRParen : rest2) -> Just (DisjrI p, rest2); _ -> Nothing
+
+parseE (TIdent "NegI" : TIdent h : TLParen : rest) = do
+    (p, rest1) <- parseE rest
+    case rest1 of (TRParen : rest2) -> Just (NegI h p, rest2); _ -> Nothing
+
+parseE (TIdent "NegE" : TIdent h : TLParen : rest) = do
+    (p, rest1) <- parseE rest
+    case rest1 of (TRParen : rest2) -> Just (NegE h p, rest2); _ -> Nothing
+
+-- ==========================================
+-- 3. Rules with 2 Sub-proofs
+-- Syntax: RuleName [AssmName] "(" E1 "," E2 ")"
+-- ==========================================
+
+parseE (TIdent "ImplE" : TIdent h : TLParen : rest) = do
+    (p1, rest1) <- parseE rest
+    case rest1 of
+        (TComma : rest2) -> do
+            (p2, rest3) <- parseE rest2
+            case rest3 of (TRParen : rest4) -> Just (ImplE h p1 p2, rest4); _ -> Nothing
+        _ -> Nothing
+
+parseE (TIdent "ConjI" : TLParen : rest) = do
+    (p1, rest1) <- parseE rest
+    case rest1 of
+        (TComma : rest2) -> do
+            (p2, rest3) <- parseE rest2
+            case rest3 of (TRParen : rest4) -> Just (ConjI p1 p2, rest4); _ -> Nothing
+        _ -> Nothing
+
+parseE (TIdent "DisjE" : TIdent h : TLParen : rest) = do
+    (p1, rest1) <- parseE rest
+    case rest1 of
+        (TComma : rest2) -> do
+            (p2, rest3) <- parseE rest2
+            case rest3 of (TRParen : rest4) -> Just (DisjE h p1 p2, rest4); _ -> Nothing
+        _ -> Nothing
+
+-- ==========================================
+-- 4. Equivalence Rules
+-- ==========================================
+parseE (TIdent "EqivI" : TIdent h : TLParen : rest) = do
+    (p1, rest1) <- parseE rest
+    case rest1 of
+        (TComma : rest2) -> do
+            (p2, rest3) <- parseE rest2
+            case rest3 of (TRParen : rest4) -> Just (EqivI h p1 p2, rest4); _ -> Nothing
+        _ -> Nothing
+
+parseE (TIdent "EqivE" : TIdent h : TLParen : rest) = do
+    (p, rest1) <- parseE rest
+    case rest1 of (TRParen : rest2) -> Just (EqivE h p, rest2); _ -> Nothing
+
+-- ==========================================
+-- 5. Quantifier Rules
+-- ==========================================
+parseE (TIdent "AllsI" : TIdent x : TLParen : rest) = do
+    (p, rest1) <- parseE rest
+    case rest1 of (TRParen : rest2) -> Just (AllsI x p, rest2); _ -> Nothing
+
+-- Note: AllsE requires a term to substitute. It calls `parseTerm` from the formula parser.
+parseE (TIdent "AllsE" : TIdent x : TIdent h : TLParen : rest) = do
+    (p, rest1) <- parseE rest
+    case rest1 of (TRParen : rest2) -> Just (AllsE x h p, rest2); _ -> Nothing
+
+-- ExisI requires the witness term
+parseE (TIdent "ExisI" : TIdent x : TLParen : rest) = do
+    (p, rest1) <- parseE rest
+    case rest1 of (TRParen : rest2) -> Just (ExisI x p, rest2); _ -> Nothing
+
+-- ExisE introduces a new variable and assumption name for the subproof
+parseE (TIdent "ExisE" : TIdent x : TIdent h_new : TLParen : rest) = do
+    (p, rest1) <- parseE rest
+    case rest1 of (TRParen : rest2) -> Just (ExisE x h_new p, rest2); _ -> Nothing
+
+-- Catch-all for syntax errors
+parseE _ = Nothing
+
 
 parseProof :: String -> Proof
-parseProof s =
-  case parseProofTokens (tokenize s) of
-    (p, []) -> p
-    (_, ts) -> error ("Unconsumed tokens: " ++ show ts)
+parseProof s = 
+    case parseE (lexer s) of
+        Just (p, []) -> p
+        Just (_, ts) -> error $ "Parse error in proof. Unconsumed tokens starting at: " ++ show (take 5 ts) ++ "\nIn proof: " ++ s
+        Nothing      -> error $ "Failed to parse proof block. Check your syntax and parentheses.\nIn proof: " ++ s
 
+-- Parsing macros
 
--- Collect lines that are indented
-collectIndented :: [String] -> ([String], [String])
-collectIndented [] = ([], [])
-collectIndented (l:ls)
-    | "  " `List.isPrefixOf` l = let (collected, remaining) = collectIndented ls
-                             in (drop 2 l : collected, remaining)  -- remove indentation
-    | otherwise = ([], l:ls)
+parseMacroLine :: String -> (String, [String], String)
+parseMacroLine line = 
+    let rest = drop 6 line -- drop "macro "
+        (lhs, rhs) = break (== '=') rest
+        body = trim (drop 1 rhs)
+        (namePart, argsPart) = break (== '(') (trim lhs)
+        args = if null argsPart 
+               then [] 
+               else splitArgs (init (tail argsPart)) -- drop the ( and )
+    in (trim namePart, map trim args, body)
 
+applyMacro :: (String, [String], String) -> String -> String
+applyMacro _ [] = []
+applyMacro mac@(name, params, body) str@(c:cs)
+    | name `List.isPrefixOf` str = 
+        let afterName = drop (length name) str
+        in if not (null afterName) && head afterName == '('
+           then 
+               let (argsStr, restAfterMacro) = extractParenBlock (tail afterName) 0 ""
+                   args = splitArgs argsStr
+                   expandedBody = "(" ++ foldl (\b (param, arg) -> replaceWord param ("(" ++ arg ++ ")") b) body (zip params args) ++ ")"
+               in expandedBody ++ applyMacro mac restAfterMacro
+           else if null params && (null afterName || not (isAlphaNum (head afterName) || head afterName == '_'))
+           then 
+               "(" ++ body ++ ")" ++ applyMacro mac afterName
+           else c : applyMacro mac cs
+    | isAlphaNum c || c == '_' = 
+        let (word, rest) = span (\x -> isAlphaNum x || x == '_') str
+        in word ++ applyMacro mac rest
+    | otherwise = c : applyMacro mac cs
 
-parseProofTokens :: [Token] -> (Proof, [Token])
-parseProofTokens (TIdent "Exact" : TIdent name : rest) =
-    (Exact name, rest)
+replaceWord :: String -> String -> String -> String
+replaceWord _ _ [] = []
+replaceWord search replace str@(c:cs)
+    | search `List.isPrefixOf` str = 
+        let after = drop (length search) str
+        in if null after || not (isAlphaNum (head after) || head after == '_')
+           then replace ++ replaceWord search replace after
+           else c : replaceWord search replace cs
+    | isAlphaNum c || c == '_' = 
+        let (word, rest) = span (\x -> isAlphaNum x || x == '_') str
+        in word ++ replaceWord search replace rest
+    | otherwise = c : replaceWord search replace cs
 
-parseProofTokens (TIdent "ImplI" : TIdent h : TLParen : rest) =
-    let (subproof, rest1) = parseProofTokens rest
-        rest2 = expect TRParen rest1
-    in (ImplI h subproof, rest2)
+extractParenBlock :: String -> Int -> String -> (String, String)
+extractParenBlock [] _ acc = (reverse acc, [])
+extractParenBlock (')':cs) 0 acc = (reverse acc, cs)
+extractParenBlock (')':cs) n acc = extractParenBlock cs (n-1) (')':acc)
+extractParenBlock ('(':cs) n acc = extractParenBlock cs (n+1) ('(':acc)
+extractParenBlock (c:cs) n acc   = extractParenBlock cs n (c:acc)
 
-parseProofTokens (TIdent "ImplE" : TIdent h : TLParen : rest) =
-    let (p1, rest1) = parseProofTokens rest
-        rest2 = expect TComma rest1
-        (p2, rest3) = parseProofTokens rest2
-        rest4 = expect TRParen rest3
-    in (ImplE h p1 p2, rest4)
+splitArgs :: String -> [String]
+splitArgs = splitArgs' 0 ""
+  where
+    splitArgs' _ acc [] = [trim (reverse acc)]
+    splitArgs' 0 acc (',':cs) = trim (reverse acc) : splitArgs' 0 "" cs
+    splitArgs' n acc ('(':cs) = splitArgs' (n+1) ('(':acc) cs
+    splitArgs' n acc (')':cs) = splitArgs' (n-1) (')':acc) cs
+    splitArgs' n acc (c:cs)   = splitArgs' n (c:acc) cs
 
+trim :: String -> String
+trim = f . f where f = reverse . dropWhile isSpace
 
+parseLemmaLine :: String -> (String, [String], String)
+parseLemmaLine line = 
+    let rest = drop 6 line -- drop "lemma "
+        (lhs, rhs) = break (== '=') rest
+        body = trim (drop 1 rhs)
+        (namePart, argsPart) = break (== '(') (trim lhs)
+        args = if null argsPart 
+               then [] 
+               else splitArgs (init (tail argsPart))
+    in (trim namePart, map trim args, body)
+
+applyLemma :: (String, [String], String) -> String -> String
+applyLemma _ [] = []
+applyLemma lem@(name, params, body) str@(c:cs)
+    | name `List.isPrefixOf` str = 
+        let afterName = drop (length name) str
+        in if not (null afterName) && head afterName == '('
+           then 
+               let (argsStr, restAfter) = extractParenBlock (tail afterName) 0 ""
+                   args = splitArgs argsStr
+                   expandedBody = foldl (\b (param, arg) -> replaceWord param arg b) body (zip params args)
+               in expandedBody ++ applyLemma lem restAfter
+           else if null params && (null afterName || not (isAlphaNum (head afterName) || head afterName == '_'))
+           then body ++ applyLemma lem afterName
+           else c : applyLemma lem cs
+    | isAlphaNum c || c == '_' = 
+        let (word, rest) = span (\x -> isAlphaNum x || x == '_') str
+        in word ++ applyLemma lem rest
+    | otherwise = c : applyLemma lem cs

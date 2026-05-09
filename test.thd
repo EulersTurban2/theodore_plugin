@@ -1,14 +1,17 @@
-goal : R
+macro RULE(X) = P(X) -> Q(X)
 
-assumption h1 : P -> Q
-assumption h2 : Q -> R
-assumption h3 : P
+lemma InstantiateAndApply(RULE_ASSM, VAR, BASE_ASSM) = 
+    AllsE VAR RULE_ASSM (
+        ImplE RULE_ASSM (
+            Exact BASE_ASSM ,
+            Exact RULE_ASSM
+        )
+    )
+
+goal : Q(a)
+
+assumption h_rule : All x : RULE(x)
+assumption h_base : P(a)
 
 proof
-ImplE h2 (
-  ImplE h1 (
-    Exact h3,
-    Exact h1
-  ),
-  Exact h2
-)
+InstantiateAndApply(h_rule, a, h_base)

@@ -99,7 +99,7 @@ substVar x y (Alls z f) = if x == z
                             then Alls z f 
                             else Alls z (substVar x y f)
 substVar x y (Exis z f) = if x == z 
-                            then Alls z f
+                            then Exis z f
                             else Exis z (substVar x y f)
 substVar x y (Rel r ts) = Rel r (map (substVarTerm x y) ts)
     where substVarTerm x y (Var z) = if x == z then Var y else Var z
