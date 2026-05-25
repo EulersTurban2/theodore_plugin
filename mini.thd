@@ -6,4 +6,4 @@ goal : B & B
 lemma tmp(hyp1, hyp2) = ImplE hyp1 (Exact hyp2, Exact hyp1)
 
 proof
-ConjI ( tmp(h1,h2), tmp(h1,h2) )
+ConjI ( tmp(h1, h2), tmp(h1, h2) )

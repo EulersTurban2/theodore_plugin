@@ -4,6 +4,8 @@
 module Theodore 
     ( Assumption ( Assumption )
     , Assumptions
+    , Lemma ( Lemma )
+    , Lemmas
     , Subgoal ( Subgoal )
     , Goal
     , Proof ( ToDo
@@ -22,24 +24,32 @@ module Theodore
             , EqivE
             , NegE  
             , AllsE 
-            , ExisE )
+            , ExisE
+            , Call )
     , mkGoal
     , apply
+    , applyWithLemmas
     , genLatexTree
+    , genLatexTreeWithLemmas
+    , TheodoreError ( TheodoreError )
+    , throwTheodoreError
+    , parseFormulaIn
     , parseFormula
+    , parseAssumptionIn
     , parseAssumption
+    , parseProofIn
     , parseProof
     , trim
     , indentLevel
     , applyMacro
+    , parseMacroLineIn
     , parseMacroLine
+    , parseLemmaLineIn
     , parseLemmaLine
-    , applyLemma
     ) where
 
 import FOL
 
-import Debug.Trace (trace)
 import Data.Char (isSpace, isAlpha, isAlphaNum)
 import qualified Data.List as List
 
@@ -47,6 +57,12 @@ data Assumption = Assumption { name     :: String
                              , formula  :: Formula }
 
 type Assumptions = [Assumption]
+
+data Lemma = Lemma { lemmaId     :: String
+                   , lemmaParams :: [String]
+                   , lemmaBody   :: Proof }
+
+type Lemmas = [Lemma]
 
 type MetaVars = [String]
 
@@ -91,6 +107,8 @@ data Proof = ToDo
            | ExisE  { mvar      :: String
                     , assmName  :: String
                     , proof     :: Proof }
+           | Call   { callName  :: String
+                    , callArgs  :: [String] }
 
 data Token
     = TAll | TEx | TEquiv | TOr | TAnd | TNeg | TImpl
@@ -101,9 +119,92 @@ data Token
 
 type Parser a = [Token] -> Maybe (a, [Token])
 
+data TheodoreError =
+    TheodoreError { errTitle   :: String
+                  , errContext :: String
+                  , errMessage :: String
+                  , errSource  :: Maybe String
+                  , errColumn  :: Maybe Int
+                  , errHints   :: [String] }
+
+formatTheodoreError :: TheodoreError -> String
+formatTheodoreError err =
+    errTitle err ++ contextLine ++ "\n"
+    ++ errMessage err
+    ++ sourceBlock
+    ++ hintsBlock
+  where
+    contextLine =
+        if null (errContext err) then "" else " in " ++ errContext err
+    sourceBlock =
+        case errSource err of
+            Nothing -> ""
+            Just source ->
+                "\n\n" ++ source
+                ++ case errColumn err of
+                    Nothing -> ""
+                    Just col -> "\n" ++ replicate (max 0 (col - 1)) ' ' ++ "^"
+    hintsBlock =
+        case errHints err of
+            [] -> ""
+            hints -> "\n\nHints:\n" ++ unlines (map ("- " ++) hints)
+
+throwTheodoreError :: TheodoreError -> a
+throwTheodoreError = error . formatTheodoreError
+
+syntaxError :: String -> String -> Maybe String -> Maybe Int -> [String] -> a
+syntaxError context message source col hints =
+    throwTheodoreError (TheodoreError "Syntax error" context message source col hints)
+
+lexicalError :: String -> String -> String -> Int -> [String] -> a
+lexicalError context message source col hints =
+    throwTheodoreError (TheodoreError "Lexical error" context message (Just source) (Just col) hints)
+
+prettyTokens :: [Token] -> String
+prettyTokens [] = "<end of input>"
+prettyTokens tokens = List.intercalate " " (map prettyToken (take 8 tokens))
+
+prettyToken :: Token -> String
+prettyToken TAll = "All"
+prettyToken TEx = "Ex"
+prettyToken TEquiv = "<->"
+prettyToken TOr = "|"
+prettyToken TAnd = "&"
+prettyToken TNeg = "~"
+prettyToken TImpl = "->"
+prettyToken TTrue = "True"
+prettyToken TFalse = "False"
+prettyToken TLParen = "("
+prettyToken TRParen = ")"
+prettyToken TColon = ":"
+prettyToken TComma = ","
+prettyToken (TIdent value) = value
+
+formulaHints :: [String]
+formulaHints =
+    [ "Atoms look like A, P(x), or Rel(x, y)."
+    , "Use ~, &, |, ->, <-> for logical operators."
+    , "Use quantifiers as All x : formula or Ex x : formula."
+    , "Wrap formulas in parentheses when precedence is unclear."
+    ]
+
+proofHints :: [String]
+proofHints =
+    [ "Examples: Exact h, ImplE h (Exact a, Exact h), ConjI (p1, p2)."
+    , "Lemma calls look like name(arg1, arg2)."
+    , "Rule names are case-sensitive."
+    , "Every opening parenthesis must have a matching closing parenthesis."
+    ]
+
 
 instance Show Assumption where
     show assm = show (formula assm) ++ " (\ESC[32m" ++ (name assm) ++ "\ESC[0m)"
+
+instance Show Lemma where
+    show (Lemma lemmaName params body) =
+        "lemma " ++ lemmaName ++ "(" ++ List.intercalate ", " params ++ ") =\n"
+        ++ "-- params: " ++ show params ++ " (" ++ show (length params) ++ ")\n"
+        ++ show body
 
 instance {-# OVERLAPS #-} Show Assumptions where
     show [] = ""
@@ -141,6 +242,7 @@ showProof append (NegE assm proof)          = append ++ "¬E (" ++ assm ++ ").\n
 showProof append (EqivE assm proof)         = append ++ "↔E (" ++ assm ++ ").\n" ++ showProof append proof
 showProof append (AllsE mvar assm proof)    = append ++ "∀E (" ++ mvar ++ ", " ++ assm ++ ").\n" ++ showProof append proof
 showProof append (ExisE mvar assm proof)    = append ++ "∃E (" ++ mvar ++ ", " ++ assm ++ ").\n" ++ showProof append proof
+showProof append (Call name args)           = append ++ name ++ "(" ++ List.intercalate ", " args ++ ").\n"
 
 show' :: Int -> Goal -> String
 show' _ [] = ""
@@ -170,8 +272,10 @@ mkGoal assms cncls = [ Subgoal [] assms cncls ]
 -- Apply assumption
 exact :: String -> Goal -> Goal
 exact assmName []       = error "Nothing to apply exact to!"
-exact assmName (g : gs) = 
-    if member assmName (assms g) then gs else error "Invalid rule!"
+exact assmName (g : gs) =
+    case Theodore.lookup assmName (assms g) of
+        Just assm | formula assm == cncls g -> gs
+        _                                   -> error "Invalid rule!"
 
 -- Apply implI
 intro :: String -> Goal -> Goal
@@ -368,23 +472,108 @@ gen mvar assmName (g : gs) = Subgoal
                 Nothing  -> error "Invalid rule!"
 
 apply :: Proof -> Goal -> Goal
-apply ToDo                          goal = goal
-apply (Exact assm)                  goal = exact assm goal
-apply (ImplI assm proof)            goal = apply proof (intro assm goal)
-apply (ConjI proofA proofB)         goal = apply proofB (apply proofA (tear goal))
-apply (DisjlI proof)                goal = apply proof (left goal)
-apply (DisjrI proof)                goal = apply proof (right goal)
-apply (EqivI assm proofA proofB)    goal = apply proofB (apply proofA (iff assm goal))
-apply (NegI assm proof)             goal = apply proof (false assm goal)
-apply (AllsI mvar proof)            goal = apply proof (free mvar goal)
-apply (ExisI mvar proof)            goal = apply proof (set mvar goal)
-apply (ImplE assm proofA proofB)    goal = apply proofB (apply proofA (have assm goal))
-apply (ConjE assm proof)            goal = apply proof (split assm goal)
-apply (DisjE assm proofA proofB)    goal = apply proofB (apply proofA (cases assm goal))
-apply (EqivE assm proof)            goal = apply proof (equiv assm goal)
-apply (NegE assm proof)             goal = apply proof (turn assm goal)
-apply (AllsE mvar assm proof)       goal = apply proof (fix mvar assm goal)
-apply (ExisE mvar assm proof)       goal = apply proof (gen mvar assm goal)
+apply = applyWithLemmas []
+
+applyWithLemmas :: Lemmas -> Proof -> Goal -> Goal
+applyWithLemmas _      ToDo                          goal = goal
+applyWithLemmas _      (Exact assm)                  goal = exact assm goal
+applyWithLemmas lemmas (ImplI assm proof)            goal = applyWithLemmas lemmas proof (intro assm goal)
+applyWithLemmas lemmas (ConjI proofA proofB)         goal = applyWithLemmas lemmas proofB (applyWithLemmas lemmas proofA (tear goal))
+applyWithLemmas lemmas (DisjlI proof)                goal = applyWithLemmas lemmas proof (left goal)
+applyWithLemmas lemmas (DisjrI proof)                goal = applyWithLemmas lemmas proof (right goal)
+applyWithLemmas lemmas (EqivI assm proofA proofB)    goal = applyWithLemmas lemmas proofB (applyWithLemmas lemmas proofA (iff assm goal))
+applyWithLemmas lemmas (NegI assm proof)             goal = applyWithLemmas lemmas proof (false assm goal)
+applyWithLemmas lemmas (AllsI mvar proof)            goal = applyWithLemmas lemmas proof (free mvar goal)
+applyWithLemmas lemmas (ExisI mvar proof)            goal = applyWithLemmas lemmas proof (set mvar goal)
+applyWithLemmas lemmas (ImplE assm proofA proofB)    goal = applyWithLemmas lemmas proofB (applyWithLemmas lemmas proofA (have assm goal))
+applyWithLemmas lemmas (ConjE assm proof)            goal = applyWithLemmas lemmas proof (split assm goal)
+applyWithLemmas lemmas (DisjE assm proofA proofB)    goal = applyWithLemmas lemmas proofB (applyWithLemmas lemmas proofA (cases assm goal))
+applyWithLemmas lemmas (EqivE assm proof)            goal = applyWithLemmas lemmas proof (equiv assm goal)
+applyWithLemmas lemmas (NegE assm proof)             goal = applyWithLemmas lemmas proof (turn assm goal)
+applyWithLemmas lemmas (AllsE mvar assm proof)       goal = applyWithLemmas lemmas proof (fix mvar assm goal)
+applyWithLemmas lemmas (ExisE mvar assm proof)       goal = applyWithLemmas lemmas proof (gen mvar assm goal)
+applyWithLemmas lemmas (Call name args)              goal = applyLemmaCall lemmas name args goal
+
+findLemma :: String -> Lemmas -> Lemma
+findLemma name [] = throwTheodoreError (TheodoreError
+    "Lemma call error"
+    ("lemma call " ++ name)
+    ("Lemma " ++ show name ++ " was not found.")
+    Nothing
+    Nothing
+    [ "Check the lemma name and make sure it is declared before the proof section."
+    , "Lemma calls look like name(arg1, arg2)."
+    ])
+findLemma name (lemma : lemmas) =
+    if lemmaId lemma == name then lemma else findLemma name lemmas
+
+instantiateLemma :: Lemmas -> String -> [String] -> Subgoal -> (Proof, Goal)
+instantiateLemma lemmas name args g =
+    let lemma = findLemma name lemmas
+        params = lemmaParams lemma
+     in if length params == length args
+        then let bindings = zip params args
+                 localAssms = concatMap (localAssumption (assms g)) bindings
+                 substitutions = filter (not . isAssumptionArg (assms g) . snd) bindings
+                 localProof = substProofNames substitutions (lemmaBody lemma)
+              in (localProof, [Subgoal (mvars g) localAssms (cncls g)])
+        else throwTheodoreError (TheodoreError
+            "Lemma call error"
+            ("lemma call " ++ name)
+            ("Wrong number of arguments for lemma " ++ name
+                ++ ". Expected " ++ show (length params)
+                ++ ", got " ++ show (length args) ++ ".")
+            Nothing
+            Nothing
+            [ "Lemma parameters: " ++ show params
+            , "Call arguments: " ++ show args
+            , "Matched lemma:\n" ++ show lemma
+            ])
+  where
+    localAssumption as (param, arg) =
+        case Theodore.lookup arg as of
+            Just assm -> [Assumption param (formula assm)]
+            Nothing   -> []
+    isAssumptionArg as arg =
+        case Theodore.lookup arg as of
+            Just _  -> True
+            Nothing -> False
+
+applyLemmaCall :: Lemmas -> String -> [String] -> Goal -> Goal
+applyLemmaCall _      name _    []       = error $ "Nothing to apply lemma " ++ name ++ " to!"
+applyLemmaCall lemmas name args (g : gs) =
+    let (localProof, localGoal) = instantiateLemma lemmas name args g
+     in case applyWithLemmas lemmas localProof localGoal of
+        []        -> gs
+        remaining -> error $
+            "Lemma " ++ name ++ " did not prove the current goal. Remaining local subgoals:\n"
+            ++ show remaining
+
+substProofNames :: [(String, String)] -> Proof -> Proof
+substProofNames env ToDo = ToDo
+substProofNames env (Exact assm) = Exact (substName env assm)
+substProofNames env (ImplI assm proof) = ImplI (substName env assm) (substProofNames env proof)
+substProofNames env (ConjI proofA proofB) = ConjI (substProofNames env proofA) (substProofNames env proofB)
+substProofNames env (DisjlI proof) = DisjlI (substProofNames env proof)
+substProofNames env (DisjrI proof) = DisjrI (substProofNames env proof)
+substProofNames env (EqivI assm proofA proofB) = EqivI (substName env assm) (substProofNames env proofA) (substProofNames env proofB)
+substProofNames env (NegI assm proof) = NegI (substName env assm) (substProofNames env proof)
+substProofNames env (AllsI mvar proof) = AllsI (substName env mvar) (substProofNames env proof)
+substProofNames env (ExisI mvar proof) = ExisI (substName env mvar) (substProofNames env proof)
+substProofNames env (ImplE assm proofA proofB) = ImplE (substName env assm) (substProofNames env proofA) (substProofNames env proofB)
+substProofNames env (ConjE assm proof) = ConjE (substName env assm) (substProofNames env proof)
+substProofNames env (DisjE assm proofA proofB) = DisjE (substName env assm) (substProofNames env proofA) (substProofNames env proofB)
+substProofNames env (EqivE assm proof) = EqivE (substName env assm) (substProofNames env proof)
+substProofNames env (NegE assm proof) = NegE (substName env assm) (substProofNames env proof)
+substProofNames env (AllsE mvar assm proof) = AllsE (substName env mvar) (substName env assm) (substProofNames env proof)
+substProofNames env (ExisE mvar assm proof) = ExisE (substName env mvar) (substName env assm) (substProofNames env proof)
+substProofNames env (Call name args) = Call name (map (substName env) args)
+
+substName :: [(String, String)] -> String -> String
+substName env value =
+    case List.lookup value env of
+        Just value' -> value'
+        Nothing     -> value
 
 mathTexMetaVars :: MetaVars -> String
 mathTexMetaVars mvars = List.intercalate ", " mvars
@@ -406,49 +595,60 @@ mathTexSubgoal (Subgoal mvars assms cncls)  = mathTexMetaVars mvars
                                            ++ mathTexFormula cncls
 
 latexTree :: Proof -> Goal -> String
-latexTree ToDo                          _    = "%ToDo\n"
-latexTree (Exact assm)                  goal = "\\AxiomC{}\n\\RightLabel{$\\mathsf{asm}$}\n\\UnaryInfC{$" ++ mathTexSubgoal (head goal) ++ "$}\n"
-latexTree (ImplI assm proof)            goal = latexTree proof (intro assm goal) 
+latexTree = latexTreeWithLemmas []
+
+latexTreeWithLemmas :: Lemmas -> Proof -> Goal -> String
+latexTreeWithLemmas _      ToDo                          _    = "%ToDo\n"
+latexTreeWithLemmas _      (Exact assm)                  goal = "\\AxiomC{}\n\\RightLabel{$\\mathsf{asm}$}\n\\UnaryInfC{$" ++ mathTexSubgoal (head goal) ++ "$}\n"
+latexTreeWithLemmas lemmas (ImplI assm proof)            goal = latexTreeWithLemmas lemmas proof (intro assm goal)
                                             ++ "\\RightLabel{$\\implies_I$}\n\\UnaryInfC{$" ++ mathTexSubgoal (head goal) ++ "$}\n"
-latexTree (ConjI proofA proofB)         goal = latexTree proofB (apply proofA (tear goal))
-                                            ++ latexTree proofA (tear goal) 
+latexTreeWithLemmas lemmas (ConjI proofA proofB)         goal = latexTreeWithLemmas lemmas proofB (applyWithLemmas lemmas proofA (tear goal))
+                                            ++ latexTreeWithLemmas lemmas proofA (tear goal)
                                             ++ "\\RightLabel{$\\land_I$}\n\\BinaryInfC{$" ++ mathTexSubgoal (head goal) ++ "$}\n"
-latexTree (DisjlI proof)                goal = latexTree proof (left goal)
+latexTreeWithLemmas lemmas (DisjlI proof)                goal = latexTreeWithLemmas lemmas proof (left goal)
                                             ++ "\\RightLabel{$\\lor_{I_l}$}\n\\UnaryInfC{$" ++ mathTexSubgoal (head goal) ++ "$}\n"
-latexTree (DisjrI proof)                goal = latexTree proof (right goal)
+latexTreeWithLemmas lemmas (DisjrI proof)                goal = latexTreeWithLemmas lemmas proof (right goal)
                                             ++ "\\RightLabel{$\\lor_{I_r}$}\n\\UnaryInfC{$" ++ mathTexSubgoal (head goal) ++ "$}\n"
-latexTree (EqivI assm proofA proofB)    goal = latexTree proofB (apply proofA (iff assm goal))
-                                            ++ latexTree proofA (iff assm goal) 
+latexTreeWithLemmas lemmas (EqivI assm proofA proofB)    goal = latexTreeWithLemmas lemmas proofB (applyWithLemmas lemmas proofA (iff assm goal))
+                                            ++ latexTreeWithLemmas lemmas proofA (iff assm goal)
                                             ++ "\\RightLabel{$\\equiv_I$}\n\\BinaryInfC{$" ++ mathTexSubgoal (head goal) ++ "$}\n"
-latexTree (NegI assm proof)             goal = latexTree proof (false assm goal)
+latexTreeWithLemmas lemmas (NegI assm proof)             goal = latexTreeWithLemmas lemmas proof (false assm goal)
                                             ++ "\\RightLabel{$\\neg_I$}\n\\UnaryInfC{$" ++ mathTexSubgoal (head goal) ++ "$}\n"
-latexTree (AllsI mvar proof)            goal = latexTree proof (free mvar goal)
+latexTreeWithLemmas lemmas (AllsI mvar proof)            goal = latexTreeWithLemmas lemmas proof (free mvar goal)
                                             ++ "\\RightLabel{$\\forall_I(" ++ mvar ++ ")$}\n\\UnaryInfC{$" ++ mathTexSubgoal (head goal) ++ "$}\n"
-latexTree (ExisI mvar proof)            goal = latexTree proof (set mvar goal)
+latexTreeWithLemmas lemmas (ExisI mvar proof)            goal = latexTreeWithLemmas lemmas proof (set mvar goal)
                                             ++ "\\RightLabel{$\\exists_I(" ++ mvar ++ ")$}\n\\UnaryInfC{$" ++ mathTexSubgoal (head goal) ++ "$}\n"
-latexTree (ImplE assm proofA proofB)    goal = latexTree proofB (apply proofA (have assm goal))
-                                            ++ latexTree proofA (have assm goal)
+latexTreeWithLemmas lemmas (ImplE assm proofA proofB)    goal = latexTreeWithLemmas lemmas proofB (applyWithLemmas lemmas proofA (have assm goal))
+                                            ++ latexTreeWithLemmas lemmas proofA (have assm goal)
                                             ++ "\\RightLabel{$\\implies_E$}\n\\BinaryInfC{$" ++ mathTexSubgoal (head goal) ++ "$}\n" 
-latexTree (ConjE assm proof)            goal = latexTree proof (split assm goal)
+latexTreeWithLemmas lemmas (ConjE assm proof)            goal = latexTreeWithLemmas lemmas proof (split assm goal)
                                             ++ "\\RightLabel{$\\land_E$}\n\\UnaryInfC{$" ++ mathTexSubgoal (head goal) ++ "$}\n"
-latexTree (DisjE assm proofA proofB)    goal = latexTree proofB (apply proofA (cases assm goal))
-                                            ++ latexTree proofA (cases assm goal) 
+latexTreeWithLemmas lemmas (DisjE assm proofA proofB)    goal = latexTreeWithLemmas lemmas proofB (applyWithLemmas lemmas proofA (cases assm goal))
+                                            ++ latexTreeWithLemmas lemmas proofA (cases assm goal)
                                             ++ "\\RightLabel{$\\lor_E$}\n\\BinaryInfC{$" ++ mathTexSubgoal (head goal) ++ "$}\n" 
-latexTree (EqivE assm proof)            goal = latexTree proof (equiv assm goal)
+latexTreeWithLemmas lemmas (EqivE assm proof)            goal = latexTreeWithLemmas lemmas proof (equiv assm goal)
                                             ++ "\\RightLabel{$\\equiv_E$}\n\\UnaryInfC{$" ++ mathTexSubgoal (head goal) ++ "$}\n"
-latexTree (NegE assm proof)             goal = latexTree proof (turn assm goal)
+latexTreeWithLemmas lemmas (NegE assm proof)             goal = latexTreeWithLemmas lemmas proof (turn assm goal)
                                             ++ "\\RightLabel{$\\neg_E$}\n\\UnaryInfC{$" ++ mathTexSubgoal (head goal) ++ "$}\n"
-latexTree (AllsE mvar assm proof)       goal = latexTree proof (fix mvar assm goal)
+latexTreeWithLemmas lemmas (AllsE mvar assm proof)       goal = latexTreeWithLemmas lemmas proof (fix mvar assm goal)
                                             ++ "\\RightLabel{$\\forall_E(" ++ mvar ++ ")$}\n\\UnaryInfC{$" ++ mathTexSubgoal (head goal) ++ "$}\n"
-latexTree (ExisE mvar assm proof)       goal = latexTree proof (gen mvar assm goal)
+latexTreeWithLemmas lemmas (ExisE mvar assm proof)       goal = latexTreeWithLemmas lemmas proof (gen mvar assm goal)
                                             ++ "\\RightLabel{$\\exists_E(" ++ mvar ++ ")$}\n\\UnaryInfC{$" ++ mathTexSubgoal (head goal) ++ "$}\n"
+latexTreeWithLemmas lemmas (Call name args)              goal@(g : _) =
+    let (localProof, localGoal) = instantiateLemma lemmas name args g
+     in latexTreeWithLemmas lemmas localProof localGoal
+        ++ "\\RightLabel{$\\mathsf{lemma}\\ " ++ name ++ "$}\n\\UnaryInfC{$" ++ mathTexSubgoal (head goal) ++ "$}\n"
+latexTreeWithLemmas _      (Call name _)                 [] = error $ "Nothing to apply lemma " ++ name ++ " to!"
 
 genLatexTree :: Proof -> Goal -> IO ()
-genLatexTree proof goal = 
-    case apply proof goal of
+genLatexTree = genLatexTreeWithLemmas []
+
+genLatexTreeWithLemmas :: Lemmas -> Proof -> Goal -> IO ()
+genLatexTreeWithLemmas lemmas proof goal =
+    case applyWithLemmas lemmas proof goal of
     []  -> do
         putStr "\\begin{prooftree}\n"
-        putStr (latexTree proof goal)
+        putStr (latexTreeWithLemmas lemmas proof goal)
         putStr "\\end{prooftree}\n"
     _   -> error "Invalid proof!"
 
@@ -493,29 +693,40 @@ extractIndented :: [String] -> ([String], [String])
 extractIndented = span (\l -> indentLevel l > 0)
 
 lexer :: String -> [Token]
-lexer [] = []
-lexer (c:cs)
-    | isSpace c = lexer cs
-    | isAlpha c = 
-        -- Extract words that are alphanumeric + underscores
-        let (word, rest) = span (\x -> isAlphaNum x || x == '_') (c:cs)
-        in case word of
-            "All"   -> TAll   : lexer rest
-            "Ex"    -> TEx    : lexer rest
-            "True"  -> TTrue  : lexer rest
-            "False" -> TFalse : lexer rest
-            _       -> TIdent word : lexer rest
-    | otherwise = case (c:cs) of
-        ('<':'-':'>':rest) -> TEquiv : lexer rest
-        ('-':'>':rest)     -> TImpl  : lexer rest
-        ('&':rest)         -> TAnd   : lexer rest
-        ('|':rest)         -> TOr    : lexer rest
-        ('~':rest)         -> TNeg   : lexer rest
-        (':':rest)         -> TColon : lexer rest
-        ('(':rest)         -> TLParen : lexer rest
-        (')':rest)         -> TRParen : lexer rest
-        (',':rest)         -> TComma : lexer rest
-        _                  -> error ("Lexer error: Unexpected character '" ++ [c] ++ "'")
+lexer = lexerIn "input"
+
+lexerIn :: String -> String -> [Token]
+lexerIn context source = go 1 source
+  where
+    go _ [] = []
+    go col (c:cs)
+        | isSpace c = go (col + 1) cs
+        | isAlpha c =
+            let (word, rest) = span (\x -> isAlphaNum x || x == '_') (c:cs)
+                token = case word of
+                    "All"   -> TAll
+                    "Ex"    -> TEx
+                    "True"  -> TTrue
+                    "False" -> TFalse
+                    _       -> TIdent word
+             in token : go (col + length word) rest
+        | otherwise = case (c:cs) of
+            ('<':'-':'>':rest) -> TEquiv  : go (col + 3) rest
+            ('-':'>':rest)     -> TImpl   : go (col + 2) rest
+            ('&':rest)         -> TAnd    : go (col + 1) rest
+            ('|':rest)         -> TOr     : go (col + 1) rest
+            ('~':rest)         -> TNeg    : go (col + 1) rest
+            (':':rest)         -> TColon  : go (col + 1) rest
+            ('(':rest)         -> TLParen : go (col + 1) rest
+            (')':rest)         -> TRParen : go (col + 1) rest
+            (',':rest)         -> TComma  : go (col + 1) rest
+            _                  -> lexicalError context
+                                    ("Unexpected character " ++ show [c] ++ ".")
+                                    source
+                                    col
+                                    [ "Identifiers must start with a letter."
+                                    , "Supported symbols are (, ), :, ,, ~, &, |, ->, and <->."
+                                    ]
 
 expect :: Token -> [Token] -> [Token]
 expect t (x:xs) | t == x = xs
@@ -567,10 +778,10 @@ parseUnary (TNeg : rest) = do
     (f, rest') <- parseUnary rest
     return (Neg f, rest')
 parseUnary (TAll : TIdent x : TColon : rest) = do
-    (f, rest') <- parseUnary rest
+    (f, rest') <- parseEquiv rest
     return (Alls x f, rest')
 parseUnary (TEx : TIdent x : TColon : rest) = do
-    (f, rest') <- parseUnary rest
+    (f, rest') <- parseEquiv rest
     return (Exis x f, rest')
 parseUnary tokens = parseAtom tokens
 
@@ -618,20 +829,56 @@ parseTerm _ = Nothing
 
 -- The Main Entry Point for Formulas
 parseFormula :: String -> Formula
-parseFormula s = 
-    case parseEquiv (lexer s) of
+parseFormula = parseFormulaIn "formula"
+
+parseFormulaIn :: String -> String -> Formula
+parseFormulaIn context s =
+    case parseEquiv (lexerIn context s) of
         Just (f, []) -> f
-        Just (_, ts) -> error ("Parse error. Unconsumed tokens: " ++ show ts ++ " in formula: " ++ s)
-        Nothing      -> error ("Failed to parse formula: " ++ s)
+        Just (_, ts) -> syntaxError
+            context
+            ("Unexpected tokens after a complete formula: " ++ prettyTokens ts)
+            (Just s)
+            Nothing
+            formulaHints
+        Nothing      -> syntaxError
+            context
+            "Could not parse this formula."
+            (Just s)
+            Nothing
+            formulaHints
 
 -- The Updated Assumption Parser
 parseAssumption :: String -> Assumption
-parseAssumption line = 
-    let rest = drop (length "assumption ") line
+parseAssumption = parseAssumptionIn "assumption"
+
+parseAssumptionIn :: String -> String -> Assumption
+parseAssumptionIn context line =
+    let line' = trim line
+        rest = drop (length "assumption ") line'
         (namePart, formulaPart) = break (== ':') rest
         name = trim namePart
-        formulaStr = drop 1 formulaPart -- No need to trim formulaStr, lexer ignores spaces
-    in Assumption name (parseFormula formulaStr)
+     in case formulaPart of
+        [] -> syntaxError
+            context
+            "Assumption declarations must contain ':' between the name and formula."
+            (Just line)
+            Nothing
+            [ "Example: assumption h1 : A -> B" ]
+        (_:formulaStr)
+            | null name -> syntaxError
+                context
+                "Assumption name is empty."
+                (Just line)
+                Nothing
+                [ "Example: assumption h1 : A -> B" ]
+            | null (trim formulaStr) -> syntaxError
+                context
+                ("Assumption " ++ show name ++ " is missing a formula.")
+                (Just line)
+                Nothing
+                [ "Example: assumption h1 : A -> B" ]
+            | otherwise -> Assumption name (parseFormulaIn (context ++ " formula") formulaStr)
 
 -- The internal Recursive DEscent parser for Proofs
 parseE :: Parser Proof
@@ -738,29 +985,133 @@ parseE (TIdent "ExisE" : TIdent x : TIdent h_new : TLParen : rest) = do
     (p, rest1) <- parseE rest
     case rest1 of (TRParen : rest2) -> Just (ExisE x h_new p, rest2); _ -> Nothing
 
+-- Lemma calls
+parseE (TIdent name : TLParen : rest) = do
+    (args, rest1) <- parseCallArgList rest
+    return (Call name args, rest1)
+
 -- Catch-all for syntax errors
 parseE _ = Nothing
 
+parseCallArgList :: Parser [String]
+parseCallArgList (TRParen : rest) = Just ([], rest)
+parseCallArgList (TIdent arg : TComma : rest) = do
+    (args, rest1) <- parseCallArgList rest
+    return (arg : args, rest1)
+parseCallArgList (TIdent arg : TRParen : rest) = Just ([arg], rest)
+parseCallArgList _ = Nothing
+
 
 parseProof :: String -> Proof
-parseProof s = 
-    case parseE (lexer s) of
+parseProof = parseProofIn "proof"
+
+parseProofIn :: String -> String -> Proof
+parseProofIn context s =
+    case parseE (lexerIn context s) of
         Just (p, []) -> p
-        Just (_, ts) -> error $ "Parse error in proof. Unconsumed tokens starting at: " ++ show (take 5 ts) ++ "\nIn proof: " ++ s
-        Nothing      -> error $ "Failed to parse proof block. Check your syntax and parentheses.\nIn proof: " ++ s
+        Just (_, ts) -> syntaxError
+            context
+            ("Unexpected tokens after a complete proof expression: " ++ prettyTokens ts)
+            (Just s)
+            Nothing
+            proofHints
+        Nothing      -> syntaxError
+            context
+            "Could not parse this proof expression."
+            (Just s)
+            Nothing
+            proofHints
 
 -- Parsing macros
 
 parseMacroLine :: String -> (String, [String], String)
-parseMacroLine line = 
-    let rest = drop 6 line -- drop "macro "
+parseMacroLine = parseMacroLineIn "macro"
+
+parseMacroLineIn :: String -> String -> (String, [String], String)
+parseMacroLineIn context line =
+    let line' = trim line
+        rest = drop 6 line' -- drop "macro "
         (lhs, rhs) = break (== '=') rest
-        body = trim (drop 1 rhs)
         (namePart, argsPart) = break (== '(') (trim lhs)
-        args = if null argsPart 
-               then [] 
-               else splitArgs (init (tail argsPart)) -- drop the ( and )
-    in (trim namePart, map trim args, body)
+        name = trim namePart
+     in case rhs of
+        [] -> syntaxError
+            context
+            "Macro declarations must contain '=' between the header and body."
+            (Just line)
+            Nothing
+            [ "Example: macro RULE(X) = P(X) -> Q(X)" ]
+        (_:bodyText)
+            | null name -> syntaxError
+                context
+                "Macro name is empty."
+                (Just line)
+                Nothing
+                [ "Example: macro RULE(X) = P(X) -> Q(X)" ]
+            | null (trim bodyText) -> syntaxError
+                context
+                ("Macro " ++ show name ++ " is missing a body.")
+                (Just line)
+                Nothing
+                [ "Example: macro RULE(X) = P(X) -> Q(X)" ]
+            | otherwise ->
+                let args = parseDefinitionArgsIn context line argsPart
+                 in (name, map trim args, trim bodyText)
+
+parseDefinitionArgsIn :: String -> String -> String -> [String]
+parseDefinitionArgsIn context source argsPart =
+    if null argsPart
+    then []
+    else let (rawArgs, rest) = extractParenBlockIn context source (tail argsPart)
+             args = parseCallArgs rawArgs
+          in if not (null (trim rest))
+             then syntaxError
+                context
+                ("Unexpected text after argument list: " ++ show (trim rest))
+                (Just source)
+                Nothing
+                [ "The definition header should look like name(arg1, arg2)." ]
+             else if any (null . trim) args
+             then syntaxError
+                context
+                "Argument list contains an empty argument."
+                (Just source)
+                Nothing
+                [ "Example: lemma name(arg1, arg2) = proof" ]
+             else args
+
+parseCallArgs :: String -> [String]
+parseCallArgs s =
+    if null (trim s)
+    then []
+    else map trim (splitArgs s)
+
+substituteTemplate :: String -> [String] -> [String] -> String -> String
+substituteTemplate name params args body =
+    if length params == length args
+    then replaceWords (zip params args) body
+    else throwTheodoreError (TheodoreError
+        "Macro expansion error"
+        ("macro call " ++ name)
+        ("Wrong number of arguments for " ++ name
+            ++ ". Expected " ++ show (length params)
+            ++ ", got " ++ show (length args) ++ ".")
+        Nothing
+        Nothing
+        [ "Macro parameters: " ++ show params
+        , "Call arguments: " ++ show args
+        ])
+
+replaceWords :: [(String, String)] -> String -> String
+replaceWords _ [] = []
+replaceWords replacements input@(c:_)
+    | isIdChar c =
+        let (word, rest) = span isIdChar input
+            replacement = case List.lookup word replacements of
+                Just value -> value
+                Nothing    -> word
+        in replacement ++ replaceWords replacements rest
+    | otherwise = c : replaceWords replacements (tail input)
 
 applyMacro :: (String, [String], String) -> String -> String
 applyMacro (name, params, body) input = go input
@@ -771,8 +1122,8 @@ applyMacro (name, params, body) input = go input
             let afterName = drop (length name) s
             in if not (null afterName) && head afterName == '('
                then let (argsStr, rest) = extractParenBlock (tail afterName) 0 ""
-                        args = splitArgs argsStr
-                        expandedBody = foldl (\b (p, a) -> replaceWord p a b) body (zip params args)
+                        args = parseCallArgs argsStr
+                        expandedBody = substituteTemplate name params args body
                     in expandedBody ++ go rest
                else if null params && (null afterName || not (isIdChar (head afterName)))
                     then "(" ++ body ++ ")" ++ go afterName
@@ -788,19 +1139,6 @@ isIdChar c = isAlphaNum c || c == '_'
 isIdStart :: Char -> Bool
 isIdStart c = isAlpha c || c == '_'
 
-replaceWord :: String -> String -> String -> String
-replaceWord _ _ [] = []
-replaceWord search replace str@(c:cs)
-    | search `List.isPrefixOf` str = 
-        let after = drop (length search) str
-        in if null after || not (isAlphaNum (head after) || head after == '_')
-           then replace ++ replaceWord search replace after
-           else c : replaceWord search replace cs
-    | isAlphaNum c || c == '_' = 
-        let (word, rest) = span (\x -> isAlphaNum x || x == '_') str
-        in word ++ replaceWord search replace rest
-    | otherwise = c : replaceWord search replace cs
-
 extractParenBlock :: String -> Int -> String -> (String, String)
 extractParenBlock [] _ acc = (reverse acc, [])
 extractParenBlock (')':cs) 0 acc = (reverse acc, cs)
@@ -808,13 +1146,27 @@ extractParenBlock (')':cs) n acc = extractParenBlock cs (n-1) (')':acc)
 extractParenBlock ('(':cs) n acc = extractParenBlock cs (n+1) ('(':acc)
 extractParenBlock (c:cs) n acc = extractParenBlock cs n (c:acc)
 
+extractParenBlockIn :: String -> String -> String -> (String, String)
+extractParenBlockIn context source = go 0 ""
+  where
+    go _ acc [] = syntaxError
+        context
+        "Missing closing ')' in argument list."
+        (Just source)
+        Nothing
+        [ "Example: lemma name(arg1, arg2) = proof" ]
+    go 0 acc (')':cs) = (reverse acc, cs)
+    go depth acc (')':cs) = go (depth - 1) (')':acc) cs
+    go depth acc ('(':cs) = go (depth + 1) ('(':acc) cs
+    go depth acc (c:cs) = go depth (c:acc) cs
+
 splitArgs :: String -> [String]
 splitArgs s = go 0 [] [] s
   where
-    go _ acc [] cur = reverse (reverse cur : acc)   -- each cur is reversed, so we reverse later
+    go _ acc cur [] = reverse (reverse cur : acc)
     go depth acc cur (c:cs)
-        | c == '(' && depth == 0 = go (depth+1) acc (c:cur) cs
-        | c == ')' && depth == 1 = go (depth-1) acc (c:cur) cs
+        | c == '(' = go (depth + 1) acc (c:cur) cs
+        | c == ')' && depth > 0 = go (depth - 1) acc (c:cur) cs
         | c == ',' && depth == 0 = go depth (reverse cur : acc) [] cs
         | otherwise = go depth acc (c:cur) cs
 
@@ -822,33 +1174,37 @@ splitArgs s = go 0 [] [] s
 trim :: String -> String
 trim = f . f where f = reverse . dropWhile isSpace
 
-parseLemmaLine :: String -> (String, [String], String)
-parseLemmaLine line = 
-    let rest = drop 6 line -- drop "lemma "
-        (lhs, rhs) = break (== '=') rest
-        body = trim (drop 1 rhs)
-        (namePart, argsPart) = break (== '(') (trim lhs)
-        args = if null argsPart 
-               then [] 
-               else splitArgs (init (tail argsPart))
-    in (trim namePart, map trim args, body)
+parseLemmaLine :: String -> Lemma
+parseLemmaLine = parseLemmaLineIn "lemma"
 
-applyLemma :: (String, [String], String) -> String -> String
-applyLemma (name, params, body) input = go input
-  where
-    go [] = []
-    go s@(c:cs)
-        | name `List.isPrefixOf` s =
-            let afterName = drop (length name) s
-            in if not (null afterName) && head afterName == '('
-               then let (argsStr, rest) = extractParenBlock (tail afterName) 0 ""
-                        args = splitArgs argsStr
-                        expandedBody = foldl (\b (p, a) -> replaceWord p a b) body (zip params args)
-                    in expandedBody ++ go rest
-               else if null params && (null afterName || not (isIdChar (head afterName)))
-                    then body ++ go afterName   -- no parentheses
-                    else name ++ go afterName
-        | isIdChar c =
-            let (idPart, rest) = span isIdChar s
-            in idPart ++ go rest
-        | otherwise = c : go cs
+parseLemmaLineIn :: String -> String -> Lemma
+parseLemmaLineIn context line =
+    let line' = trim line
+        rest = drop 6 line' -- drop "lemma "
+        (lhs, rhs) = break (== '=') rest
+        (namePart, argsPart) = break (== '(') (trim lhs)
+        lemmaName = trim namePart
+     in case rhs of
+        [] -> syntaxError
+            context
+            "Lemma declarations must contain '=' between the header and proof body."
+            (Just line)
+            Nothing
+            [ "Example: lemma mp(hImp, hBase) = ImplE hImp (Exact hBase, Exact hImp)" ]
+        (_:bodyText)
+            | null lemmaName -> syntaxError
+                context
+                "Lemma name is empty."
+                (Just line)
+                Nothing
+                [ "Example: lemma mp(hImp, hBase) = ImplE hImp (Exact hBase, Exact hImp)" ]
+            | null (trim bodyText) -> syntaxError
+                context
+                ("Lemma " ++ show lemmaName ++ " is missing a proof body.")
+                (Just line)
+                Nothing
+                [ "Example: lemma mp(hImp, hBase) = ImplE hImp (Exact hBase, Exact hImp)" ]
+            | otherwise ->
+                let params = map trim (parseDefinitionArgsIn context line argsPart)
+                    body = trim bodyText
+                 in Lemma lemmaName params (parseProofIn (context ++ " body") body)

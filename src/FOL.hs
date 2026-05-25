@@ -144,12 +144,12 @@ freeVars f = freeVars' Set.empty f
 
         freeVarsTerm :: Term -> [String]
         freeVarsTerm (Var x) = [x]
-        freeVarsTerm (Fun _ ts) = foldl1 (++) 
+        freeVarsTerm (Fun _ ts) = foldl (++) []
                                 $ map freeVarsTerm ts
 
 value :: [(String, Term)] -> String -> Maybe Term
 value [] x              = Nothing
-value ((x, t) : env) v  = if x == v then Just t else value env x
+value ((x, t) : env) v  = if x == v then Just t else value env v
 
 isTriv :: [(String, Term)] -> String -> Term -> Maybe Bool
 isTriv env x (Var y) =
@@ -224,5 +224,3 @@ mathTexSubFormula f@(Neg _)     = mathTexFormula f
 mathTexSubFormula f@(Alls _ _)  = mathTexFormula f
 mathTexSubFormula f@(Exis _ _)  = mathTexFormula f
 mathTexSubFormula f             = "(" ++ mathTexFormula f ++ ")"
-
-
