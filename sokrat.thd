@@ -1,0 +1,15 @@
+macro COVEK(x) = P(x)
+macro SMRTAN(x) = Q(x)
+
+assumption h1 : All x : (COVEK(x) -> SMRTAN(x))
+assumption h2 : COVEK(s)
+
+goal : SMRTAN(s)
+
+proof
+AllsE s h1 (
+    ImplE h1(
+        Exact h2,
+        Exact h1
+    )
+)

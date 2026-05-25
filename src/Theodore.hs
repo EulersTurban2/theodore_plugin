@@ -763,24 +763,30 @@ parseMacroLine line =
     in (trim namePart, map trim args, body)
 
 applyMacro :: (String, [String], String) -> String -> String
-applyMacro _ [] = []
-applyMacro mac@(name, params, body) str@(c:cs)
-    | name `List.isPrefixOf` str = 
-        let afterName = drop (length name) str
-        in if not (null afterName) && head afterName == '('
-           then 
-               let (argsStr, restAfterMacro) = extractParenBlock (tail afterName) 0 ""
-                   args = splitArgs argsStr
-                   expandedBody = "(" ++ foldl (\b (param, arg) -> replaceWord param ("(" ++ arg ++ ")") b) body (zip params args) ++ ")"
-               in expandedBody ++ applyMacro mac restAfterMacro
-           else if null params && (null afterName || not (isAlphaNum (head afterName) || head afterName == '_'))
-           then 
-               "(" ++ body ++ ")" ++ applyMacro mac afterName
-           else c : applyMacro mac cs
-    | isAlphaNum c || c == '_' = 
-        let (word, rest) = span (\x -> isAlphaNum x || x == '_') str
-        in word ++ applyMacro mac rest
-    | otherwise = c : applyMacro mac cs
+applyMacro (name, params, body) input = go input
+  where
+    go [] = []
+    go s@(c:cs)
+        | name `List.isPrefixOf` s =
+            let afterName = drop (length name) s
+            in if not (null afterName) && head afterName == '('
+               then let (argsStr, rest) = extractParenBlock (tail afterName) 0 ""
+                        args = splitArgs argsStr
+                        expandedBody = foldl (\b (p, a) -> replaceWord p a b) body (zip params args)
+                    in expandedBody ++ go rest
+               else if null params && (null afterName || not (isIdChar (head afterName)))
+                    then "(" ++ body ++ ")" ++ go afterName
+                    else name ++ go afterName
+        | isIdChar c =
+            let (idPart, rest) = span isIdChar s
+            in idPart ++ go rest
+        | otherwise = c : go cs
+
+isIdChar :: Char -> Bool
+isIdChar c = isAlphaNum c || c == '_'
+
+isIdStart :: Char -> Bool
+isIdStart c = isAlpha c || c == '_'
 
 replaceWord :: String -> String -> String -> String
 replaceWord _ _ [] = []
@@ -800,16 +806,18 @@ extractParenBlock [] _ acc = (reverse acc, [])
 extractParenBlock (')':cs) 0 acc = (reverse acc, cs)
 extractParenBlock (')':cs) n acc = extractParenBlock cs (n-1) (')':acc)
 extractParenBlock ('(':cs) n acc = extractParenBlock cs (n+1) ('(':acc)
-extractParenBlock (c:cs) n acc   = extractParenBlock cs n (c:acc)
+extractParenBlock (c:cs) n acc = extractParenBlock cs n (c:acc)
 
 splitArgs :: String -> [String]
-splitArgs = splitArgs' 0 ""
+splitArgs s = go 0 [] [] s
   where
-    splitArgs' _ acc [] = [trim (reverse acc)]
-    splitArgs' 0 acc (',':cs) = trim (reverse acc) : splitArgs' 0 "" cs
-    splitArgs' n acc ('(':cs) = splitArgs' (n+1) ('(':acc) cs
-    splitArgs' n acc (')':cs) = splitArgs' (n-1) (')':acc) cs
-    splitArgs' n acc (c:cs)   = splitArgs' n (c:acc) cs
+    go _ acc [] cur = reverse (reverse cur : acc)   -- each cur is reversed, so we reverse later
+    go depth acc cur (c:cs)
+        | c == '(' && depth == 0 = go (depth+1) acc (c:cur) cs
+        | c == ')' && depth == 1 = go (depth-1) acc (c:cur) cs
+        | c == ',' && depth == 0 = go depth (reverse cur : acc) [] cs
+        | otherwise = go depth acc (c:cur) cs
+
 
 trim :: String -> String
 trim = f . f where f = reverse . dropWhile isSpace
@@ -826,20 +834,21 @@ parseLemmaLine line =
     in (trim namePart, map trim args, body)
 
 applyLemma :: (String, [String], String) -> String -> String
-applyLemma _ [] = []
-applyLemma lem@(name, params, body) str@(c:cs)
-    | name `List.isPrefixOf` str = 
-        let afterName = drop (length name) str
-        in if not (null afterName) && head afterName == '('
-           then 
-               let (argsStr, restAfter) = extractParenBlock (tail afterName) 0 ""
-                   args = splitArgs argsStr
-                   expandedBody = foldl (\b (param, arg) -> replaceWord param arg b) body (zip params args)
-               in expandedBody ++ applyLemma lem restAfter
-           else if null params && (null afterName || not (isAlphaNum (head afterName) || head afterName == '_'))
-           then body ++ applyLemma lem afterName
-           else c : applyLemma lem cs
-    | isAlphaNum c || c == '_' = 
-        let (word, rest) = span (\x -> isAlphaNum x || x == '_') str
-        in word ++ applyLemma lem rest
-    | otherwise = c : applyLemma lem cs
+applyLemma (name, params, body) input = go input
+  where
+    go [] = []
+    go s@(c:cs)
+        | name `List.isPrefixOf` s =
+            let afterName = drop (length name) s
+            in if not (null afterName) && head afterName == '('
+               then let (argsStr, rest) = extractParenBlock (tail afterName) 0 ""
+                        args = splitArgs argsStr
+                        expandedBody = foldl (\b (p, a) -> replaceWord p a b) body (zip params args)
+                    in expandedBody ++ go rest
+               else if null params && (null afterName || not (isIdChar (head afterName)))
+                    then body ++ go afterName   -- no parentheses
+                    else name ++ go afterName
+        | isIdChar c =
+            let (idPart, rest) = span isIdChar s
+            in idPart ++ go rest
+        | otherwise = c : go cs

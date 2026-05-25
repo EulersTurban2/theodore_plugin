@@ -1,0 +1,51 @@
+
+macro MUL(X, Y) = m(X, Y)
+macro EQ(X, Y)  = Eq(X, Y)
+
+assumption h_assoc : All a : All b : All c : EQ( MUL(MUL(a,b), c) , MUL(a, MUL(b,c)) )
+assumption h_comm  : All a : All b : EQ( MUL(a, b) , MUL(b, a) )
+assumption h_id_L  : All a : EQ( MUL(e, a) , a )
+
+assumption h_b_inv : EQ( MUL(a, b) , e )
+assumption h_c_inv : EQ( MUL(a, c) , e )
+
+assumption h_symm  : All x : All y : (EQ(x, y) -> EQ(y, x))
+assumption h_trans : All x : All y : All z : (EQ(x, y) & EQ(y, z) -> EQ(x, z))
+assumption h_congL : All x : All y : All z : (EQ(y, z) -> EQ( MUL(x, y), MUL(x, z) ))
+assumption h_congR : All x : All y : All z : (EQ(x, y) -> EQ( MUL(x, z), MUL(y, z) ))
+
+lemma SYMM(X, Y, P) = AllsE X h_symm ( AllsE Y h_symm ( ImplE h_symm ( P , Exact h_symm ) ) )
+lemma TRANS(X, Y, Z, P1, P2) = AllsE X h_trans ( AllsE Y h_trans ( AllsE Z h_trans ( ImplE h_trans ( ConjI ( P1 , P2 ) , Exact h_trans ) ) ) )
+lemma CONGL(X, Y, Z, P) = AllsE X h_congL ( AllsE Y h_congL ( AllsE Z h_congL ( ImplE h_congL ( P , Exact h_congL ) ) ) )
+lemma CONGR(X, Y, Z, P) = AllsE X h_congR ( AllsE Y h_congR ( AllsE Z h_congR ( ImplE h_congR ( P , Exact h_congR ) ) ) )
+
+goal : EQ(b, c)
+
+proof
+TRANS( b, MUL(e, b), c,
+    SYMM( MUL(e, b), b, 
+        AllsE b h_id_L ( Exact h_id_L ) 
+    ) ,
+    TRANS( MUL(e, b), MUL(MUL(c, a), b), c,
+        CONGR( e, MUL(c, a), b, 
+            SYMM( MUL(c, a), e, 
+                TRANS( MUL(c, a), MUL(a, c), e,
+                    AllsE c h_comm ( AllsE a h_comm ( Exact h_comm ) ) ,
+                    Exact h_c_inv
+                )
+            ) 
+        ) ,
+        TRANS( MUL(MUL(c, a), b), MUL(c, MUL(a, b)), c,
+            AllsE c h_assoc ( AllsE a h_assoc ( AllsE b h_assoc ( Exact h_assoc ) ) ) , 
+            TRANS( MUL(c, MUL(a, b)), MUL(c, e), c,
+                CONGL( c, MUL(a, b), e, 
+                    Exact h_b_inv 
+                ) ,
+                TRANS( MUL(c, e), MUL(e, c), c,
+                    AllsE c h_comm ( AllsE e h_comm ( Exact h_comm ) ) ,
+                    AllsE c h_id_L ( Exact h_id_L )
+                )
+            )
+        )
+    )
+)
