@@ -1,0 +1,21 @@
+assumption h1 : All x : (P(x) & Q(x))
+
+goal : All x : All y : (P(x) & Q(y))
+
+proof
+AllsI a (
+    AllsI b (
+        ConjI (
+            AllsE a h1 (
+                ConjE h1 (
+                    Exact h11
+                )
+            ),
+            AllsE b h1 (
+                ConjE h1 (
+                    Exact h12
+                )
+            )
+        )
+    )
+)

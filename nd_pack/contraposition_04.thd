@@ -1,0 +1,6 @@
+-- Metatheory task: show that if Gamma proves phi in the contraposition system, then Gamma proves phi.
+
+goal : True
+
+proof
+ToDo

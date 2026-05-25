@@ -1,0 +1,44 @@
+assumption hprop1 : All x : All y : All z : ((R(x, y) & R(x, z)) -> R(y, z))
+assumption hprop2 : All x : All y : All z : ((R(x, y) & R(x, z)) -> R(y, z))
+assumption hrefl : All x : R(x, x)
+
+goal : All x : All y : All z : ((R(x, y) & R(y, z)) -> R(x, z))
+
+proof
+AllsI a (
+    AllsI b (
+        AllsI c (
+            ImplI h (
+                ConjE h (
+                    AllsE a hprop1 (
+                        AllsE b hprop1 (
+                            AllsE a hprop1 (
+                                ImplE hprop1 (
+                                    ConjI (
+                                        Exact h1,
+                                        AllsE a hrefl (
+                                            Exact hrefl
+                                        )
+                                    ),
+                                    AllsE b hprop2 (
+                                        AllsE a hprop2 (
+                                            AllsE c hprop2 (
+                                                ImplE hprop2 (
+                                                    ConjI (
+                                                        Exact hprop1,
+                                                        Exact h2
+                                                    ),
+                                                    Exact hprop2
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    )
+)

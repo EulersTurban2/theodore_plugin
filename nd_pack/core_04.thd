@@ -1,0 +1,14 @@
+assumption h1 : ~P1
+
+goal : ~((P1 & P2) & P3)
+
+proof
+NegI h2 (
+    ConjE h2 (
+        ConjE h21 (
+            NegE h1 (
+                Exact h211
+            )
+        )
+    )
+)

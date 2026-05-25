@@ -1,0 +1,7 @@
+assumption h1 : P(a)
+assumption h2 : ~P(b)
+
+goal : ~Eq(a, b)
+
+proof
+ToDo

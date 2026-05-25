@@ -1,0 +1,43 @@
+goal : (P | (Q & R)) <-> ((P | Q) & (P | R))
+
+proof
+EqivI h (
+    DisjE h (
+        ConjI (
+            DisjlI (
+                Exact h
+            ),
+            DisjlI (
+                Exact h
+            )
+        ),
+        ConjE h (
+            ConjI (
+                DisjrI (
+                    Exact h1
+                ),
+                DisjrI (
+                    Exact h2
+                )
+            )
+        )
+    ),
+    ConjE h (
+        DisjE h1 (
+            DisjlI (
+                Exact h1
+            ),
+            DisjE h2 (
+                DisjlI (
+                    Exact h2
+                ),
+                DisjrI (
+                    ConjI (
+                        Exact h1,
+                        Exact h2
+                    )
+                )
+            )
+        )
+    )
+)

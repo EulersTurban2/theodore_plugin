@@ -1,0 +1,10 @@
+assumption h1 : (P1 & P2) & P3
+
+goal : P2
+
+proof
+ConjE h1 (
+    ConjE h11 (
+        Exact h112
+    )
+)

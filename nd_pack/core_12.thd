@@ -1,0 +1,8 @@
+-- NDPack Core 12 is Peirce's law and needs classical indirect proof/RAA:
+-- |- ((Q -> R) -> Q) -> Q
+-- Theodore has no rule for introducing and discharging the negation of the current goal.
+
+goal : ((Q -> R) -> Q) -> Q
+
+proof
+ToDo

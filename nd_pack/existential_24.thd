@@ -1,0 +1,4 @@
+goal : (All x : Ex y : R(x, y)) | ~(All x : R(x, x))
+
+proof
+ToDo

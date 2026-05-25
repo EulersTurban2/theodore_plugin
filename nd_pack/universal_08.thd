@@ -1,0 +1,19 @@
+assumption h1 : (All x1 : P(x1)) | (All x2 : Q(x2))
+
+goal : All x : (P(x) | Q(x))
+
+proof
+AllsI a (
+    DisjE h1 (
+        AllsE a h1 (
+            DisjlI (
+                Exact h1
+            )
+        ),
+        AllsE a h1 (
+            DisjrI (
+                Exact h1
+            )
+        )
+    )
+)

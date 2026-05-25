@@ -1,0 +1,10 @@
+goal : (P & Q) -> ((P -> Q) -> P)
+
+proof
+ImplI hpq (
+    ImplI hpq2 (
+        ConjE hpq (
+            Exact hpq1
+        )
+    )
+)

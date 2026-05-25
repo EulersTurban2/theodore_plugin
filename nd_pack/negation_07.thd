@@ -1,0 +1,17 @@
+goal : ~((P & ~P) | (Q & ~Q))
+
+proof
+NegI h (
+    DisjE h (
+        ConjE h (
+            NegE h2 (
+                Exact h1
+            )
+        ),
+        ConjE h (
+            NegE h2 (
+                Exact h1
+            )
+        )
+    )
+)

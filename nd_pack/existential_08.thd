@@ -1,0 +1,10 @@
+goal : Ex x : Ex y : (R(x, y) -> R(y, x))
+
+proof
+ExisI a (
+    ExisI a (
+        ImplI h (
+            Exact h
+        )
+    )
+)

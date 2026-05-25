@@ -1,0 +1,7 @@
+assumption h1 : All x : (Eq(x, a) | Eq(x, b))
+assumption h2 : Ex x : P(x)
+
+goal : ~P(a) -> P(b)
+
+proof
+ToDo

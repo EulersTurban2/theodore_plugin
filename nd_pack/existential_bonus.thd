@@ -1,0 +1,7 @@
+-- NDPack existential bonus is a rule-shape challenge rather than a fixed sequent.
+-- This placeholder keeps a .thd entry for the exercise.
+
+goal : True
+
+proof
+ToDo

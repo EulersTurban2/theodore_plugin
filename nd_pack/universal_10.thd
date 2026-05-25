@@ -1,0 +1,21 @@
+assumption h1 : All x : (P(x) -> Q(x))
+assumption h2 : All x : (Q(x) -> R(x))
+
+goal : All x : (P(x) -> R(x))
+
+proof
+AllsI a (
+    ImplI hp (
+        AllsE a h1 (
+            ImplE h1 (
+                Exact hp,
+                AllsE a h2 (
+                    ImplE h2 (
+                        Exact h1,
+                        Exact h2
+                    )
+                )
+            )
+        )
+    )
+)

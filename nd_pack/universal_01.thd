@@ -1,0 +1,10 @@
+assumption h1 : All x : P(x)
+
+goal : All y : P(y)
+
+proof
+AllsI a (
+    AllsE a h1 (
+        Exact h1
+    )
+)

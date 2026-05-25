@@ -1,0 +1,4 @@
+goal : Ex x : Ex y : Eq(x, y)
+
+proof
+ToDo

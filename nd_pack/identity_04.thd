@@ -1,0 +1,4 @@
+goal : (Ex x : All y : Eq(x, y)) <-> (All x : All y : Eq(x, y))
+
+proof
+ToDo

@@ -1,0 +1,6 @@
+assumption h1 : Ex x : Ex y : ~(Ex z : ~P(x, y, z))
+
+goal : ~(Ex x : ~(Ex y : Ex z : P(y, z, x)))
+
+proof
+ToDo

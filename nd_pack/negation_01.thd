@@ -1,0 +1,10 @@
+assumption h1 : P
+
+goal : ~~P
+
+proof
+NegI hn (
+    NegE hn (
+        Exact h1
+    )
+)

@@ -1,0 +1,15 @@
+assumption h1 : Ex x1 : (P(a) -> Q(x1))
+
+goal : P(a) -> Ex x2 : Q(x2)
+
+proof
+ImplI hp (
+    ExisE a h1 (
+        ImplE h1 (
+            Exact hp,
+            ExisI a (
+                Exact h1
+            )
+        )
+    )
+)

@@ -1,0 +1,10 @@
+assumption h1 : Ex x : P(x)
+
+goal : Ex y : P(y)
+
+proof
+ExisE a h1 (
+    ExisI a (
+        Exact h1
+    )
+)

@@ -1,0 +1,6 @@
+assumption h1 : ~(All x : P(x))
+
+goal : Ex x : ~P(x)
+
+proof
+ToDo

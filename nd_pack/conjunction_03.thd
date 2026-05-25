@@ -1,0 +1,11 @@
+assumption h1 : P & Q
+
+goal : Q & P
+
+proof
+ConjE h1 (
+    ConjI (
+        Exact h12,
+        Exact h11
+    )
+)

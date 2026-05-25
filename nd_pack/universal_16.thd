@@ -1,0 +1,21 @@
+assumption h1 : All x : ~R(x, x)
+
+goal : ~(All x : All y : (R(x, y) | R(y, x)))
+
+proof
+NegI h (
+    AllsE a h1 (
+        AllsE a h (
+            AllsE a h (
+                DisjE h (
+                    NegE h1 (
+                        Exact h
+                    ),
+                    NegE h1 (
+                        Exact h
+                    )
+                )
+            )
+        )
+    )
+)

@@ -1,0 +1,21 @@
+assumption h1 : (P -> Q) -> (P -> R)
+
+goal : (P | R) -> (Q -> R)
+
+proof
+ImplI hpr (
+    ImplI hq (
+        DisjE hpr (
+            ImplE h1 (
+                ImplI hp (
+                    Exact hq
+                ),
+                ImplE h1 (
+                    Exact hpr,
+                    Exact h1
+                )
+            ),
+            Exact hpr
+        )
+    )
+)

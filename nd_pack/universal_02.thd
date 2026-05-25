@@ -1,0 +1,8 @@
+goal : All x : (P(x) -> P(x))
+
+proof
+AllsI a (
+    ImplI hp (
+        Exact hp
+    )
+)

@@ -1,0 +1,21 @@
+assumption h1 : All x : All y : R(x, y)
+
+goal : All x : All y : (R(x, y) & R(y, x))
+
+proof
+AllsI a (
+    AllsI b (
+        ConjI (
+            AllsE a h1 (
+                AllsE b h1 (
+                    Exact h1
+                )
+            ),
+            AllsE b h1 (
+                AllsE a h1 (
+                    Exact h1
+                )
+            )
+        )
+    )
+)

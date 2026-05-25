@@ -1,0 +1,4 @@
+goal : (P -> Q) | (Q -> R)
+
+proof
+ToDo

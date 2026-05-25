@@ -1,0 +1,31 @@
+assumption h1 : (P | Q) | (R | P1)
+
+goal : (P | P1) | (R | Q)
+
+proof
+DisjE h1 (
+    DisjE h1 (
+        DisjlI (
+            DisjlI (
+                Exact h1
+            )
+        ),
+        DisjrI (
+            DisjrI (
+                Exact h1
+            )
+        )
+    ),
+    DisjE h1 (
+        DisjrI (
+            DisjlI (
+                Exact h1
+            )
+        ),
+        DisjlI (
+            DisjrI (
+                Exact h1
+            )
+        )
+    )
+)

@@ -1,0 +1,17 @@
+assumption h1 : (P -> Q) & (Q -> P)
+
+goal : P <-> Q
+
+proof
+ConjE h1 (
+    EqivI h (
+        ImplE h11 (
+            Exact h,
+            Exact h11
+        ),
+        ImplE h12 (
+            Exact h,
+            Exact h12
+        )
+    )
+)

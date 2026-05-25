@@ -1,0 +1,8 @@
+assumption h1 : Ex x : (P(x) & (Q(x) & R(a, x)))
+assumption h2 : P(b) & Q(b)
+assumption h3 : All x : All y : (((P(x) & Q(x)) & (P(y) & Q(y))) -> Eq(x, y))
+
+goal : R(a, b)
+
+proof
+ToDo

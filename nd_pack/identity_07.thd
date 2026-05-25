@@ -1,0 +1,6 @@
+assumption h1 : Ex x : All y : (P(y) <-> Eq(x, y))
+
+goal : Ex x : All y : (P(y) -> Eq(x, y))
+
+proof
+ToDo

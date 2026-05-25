@@ -1,0 +1,11 @@
+-- NDPack Core 14 needs classical indirect proof/RAA and identity reasoning.
+-- Identity is encoded below as the predicate Eq, but Theodore cannot prove this
+-- exercise faithfully without identity intro/elimination and RAA.
+
+assumption h1 : P(a)
+assumption h2 : Q(b)
+
+goal : (Ex x : (P(x) & Q(x))) | (Ex x : Ex y : ~Eq(x, y))
+
+proof
+ToDo

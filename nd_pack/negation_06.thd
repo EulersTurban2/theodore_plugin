@@ -1,0 +1,15 @@
+assumption h1 : P -> Q
+
+goal : ~Q -> ~P
+
+proof
+ImplI hnq (
+    NegI hp (
+        ImplE h1 (
+            Exact hp,
+            NegE hnq (
+                Exact h1
+            )
+        )
+    )
+)

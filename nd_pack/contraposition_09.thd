@@ -1,0 +1,6 @@
+-- Metatheory task: replace NegE with contraposition and ImplE.
+
+goal : True
+
+proof
+ToDo

@@ -1,0 +1,7 @@
+assumption h1 : P(b) & Q(b)
+assumption h2 : All x : (P(x) -> Eq(x, a))
+
+goal : Q(a)
+
+proof
+ToDo

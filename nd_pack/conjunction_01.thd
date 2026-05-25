@@ -1,0 +1,10 @@
+assumption h1 : P
+assumption h2 : Q
+
+goal : P & Q
+
+proof
+ConjI (
+    Exact h1,
+    Exact h2
+)

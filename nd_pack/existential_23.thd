@@ -1,0 +1,19 @@
+assumption h1 : Ex x : (P(x, x) & (All y : Q(x, y)))
+
+goal : Ex x : ((Ex y : P(x, y)) & Q(x, x))
+
+proof
+ExisE a h1 (
+    ConjE h1 (
+        ExisI a (
+            ConjI (
+                ExisI a (
+                    Exact h11
+                ),
+                AllsE a h12 (
+                    Exact h12
+                )
+            )
+        )
+    )
+)

@@ -1,0 +1,6 @@
+-- Admissible rules 3 is a metatheory question, not a fixed sequent.
+
+goal : True
+
+proof
+ToDo

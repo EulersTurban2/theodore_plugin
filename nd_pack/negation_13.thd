@@ -1,0 +1,14 @@
+assumption h1 : P -> Q
+assumption h2 : P & ~Q
+
+goal : R
+
+proof
+ConjE h2 (
+    ImplE h1 (
+        Exact h21,
+        NegE h22 (
+            Exact h1
+        )
+    )
+)

@@ -1,0 +1,7 @@
+assumption h1 : All x : Ex y : (R(x, y) & P(y))
+assumption h2 : All x : ~R(x, x)
+
+goal : ~(All x : All y : (P(x) -> (P(y) -> Eq(x, y))))
+
+proof
+ToDo

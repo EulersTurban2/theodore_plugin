@@ -1,0 +1,9 @@
+assumption h1 : ~P -> Q
+assumption h2 : R | ~Q
+assumption h3 : P -> (Q1 | Q2)
+assumption h4 : ~R & ~Q2
+
+goal : Q1
+
+proof
+ToDo

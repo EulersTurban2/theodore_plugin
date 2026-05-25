@@ -1,0 +1,20 @@
+assumption h1 : All x : (P(x) -> Q(x))
+assumption h2 : All x : ~Q(x)
+
+goal : All x : ~P(x)
+
+proof
+AllsI a (
+    NegI hp (
+        AllsE a h1 (
+            ImplE h1 (
+                Exact hp,
+                AllsE a h2 (
+                    NegE h2 (
+                        Exact h1
+                    )
+                )
+            )
+        )
+    )
+)

@@ -1,0 +1,6 @@
+assumption h1 : All x : ~(All y : (P(x, y) -> Q(x, y)))
+
+goal : All x : Ex y : P(x, y)
+
+proof
+ToDo

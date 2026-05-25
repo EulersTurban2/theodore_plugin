@@ -1,0 +1,4 @@
+goal : Eq(a, b) <-> (All x : (Eq(x, a) -> Eq(x, b)))
+
+proof
+ToDo

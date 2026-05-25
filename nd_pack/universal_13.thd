@@ -1,0 +1,12 @@
+assumption h1 : All x : All y : R(x, y)
+
+goal : All x : R(x, x)
+
+proof
+AllsI a (
+    AllsE a h1 (
+        AllsE a h1 (
+            Exact h1
+        )
+    )
+)

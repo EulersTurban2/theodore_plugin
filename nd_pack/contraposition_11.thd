@@ -1,0 +1,6 @@
+-- Metatheory task: show that ordinary Natural Deduction proofs translate into the contraposition system.
+
+goal : True
+
+proof
+ToDo

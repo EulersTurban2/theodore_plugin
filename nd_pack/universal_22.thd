@@ -1,0 +1,31 @@
+assumption h1 : All x : All y : (Q(x, y) -> Q(y, x))
+assumption h2 : All x : All y : (~Q(x, y) | ~Q(y, x))
+
+goal : All x : All y : ~Q(x, y)
+
+proof
+AllsI a (
+    AllsI b (
+        NegI hq (
+            AllsE a h2 (
+                AllsE b h2 (
+                    DisjE h2 (
+                        NegE h2 (
+                            Exact hq
+                        ),
+                        AllsE a h1 (
+                            AllsE b h1 (
+                                ImplE h1 (
+                                    Exact hq,
+                                    NegE h2 (
+                                        Exact h1
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    )
+)

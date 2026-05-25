@@ -1,0 +1,6 @@
+assumption h1 : P -> (Q | R)
+
+goal : (P -> Q) | (P -> R)
+
+proof
+ToDo

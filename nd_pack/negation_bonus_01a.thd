@@ -1,0 +1,14 @@
+assumption h1 : ~~~P
+
+goal : ~P
+
+proof
+NegI hp (
+    NegE h1 (
+        NegI hnp (
+            NegE hnp (
+                Exact hp
+            )
+        )
+    )
+)
