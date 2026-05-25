@@ -1,0 +1,10 @@
+-- NDPack Core 13 needs classical indirect proof/RAA:
+-- ~All x : All y : R(x, y) |- Ex x : ~All y : R(x, y)
+-- Theodore has no rule for introducing and discharging the negation of the current goal.
+
+assumption h1 : ~All x : All y : R(x, y)
+
+goal : Ex x : ~All y : R(x, y)
+
+proof
+ToDo

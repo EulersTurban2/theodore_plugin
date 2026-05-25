@@ -1,0 +1,17 @@
+assumption h1 : ((((P1 & P2) & P3) & P4) & P5)
+
+goal : P1 & P1
+
+proof
+ConjE h1 (
+    ConjE h11 (
+        ConjE h111 (
+            ConjE h1111 (
+                ConjI (
+                    Exact h11111,
+                    Exact h11111
+                )
+            )
+        )
+    )
+)

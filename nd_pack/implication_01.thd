@@ -1,0 +1,4 @@
+goal : P -> P
+
+proof
+ImplI h (Exact h)

@@ -1,0 +1,25 @@
+assumption h1 : P | (Q & R)
+
+goal : (P | Q) & (P | R)
+
+proof
+DisjE h1 (
+    ConjI (
+        DisjlI (
+            Exact h1
+        ),
+        DisjlI (
+            Exact h1
+        )
+    ),
+    ConjE h1 (
+        ConjI (
+            DisjrI (
+                Exact h11
+            ),
+            DisjrI (
+                Exact h12
+            )
+        )
+    )
+)

@@ -1,0 +1,11 @@
+-- NDPack Core 11 needs classical indirect proof/RAA:
+-- ~P -> Q |- P | Q
+-- Theodore can use an existing negated assumption, but cannot introduce and discharge
+-- an assumption of ~(P | Q), so the proof is left open.
+
+assumption h1 : ~P -> Q
+
+goal : P | Q
+
+proof
+ToDo

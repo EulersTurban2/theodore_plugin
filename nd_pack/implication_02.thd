@@ -1,0 +1,8 @@
+goal : P -> (Q -> P)
+
+proof
+ImplI hp (
+    ImplI hq (
+        Exact hp
+    )
+)

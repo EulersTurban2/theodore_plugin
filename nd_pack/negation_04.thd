@@ -1,0 +1,12 @@
+assumption h1 : ~(P -> Q)
+
+goal : ~Q
+
+proof
+NegI hq (
+    NegE h1 (
+        ImplI hp (
+            Exact hq
+        )
+    )
+)

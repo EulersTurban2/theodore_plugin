@@ -1,0 +1,8 @@
+assumption h1 : R(a, b) & R(b, c)
+assumption h2 : ~Q(a)
+assumption h3 : Q(c)
+
+goal : Ex x : Ex y : ((~Q(x) & Q(y)) & R(x, y))
+
+proof
+ToDo

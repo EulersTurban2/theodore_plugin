@@ -1,0 +1,24 @@
+assumption h1 : All x : Ex y : R(x, y)
+assumption h2 : All x : Ex y : R(x, y)
+
+goal : All x : Ex y : Ex z : (R(x, y) & R(y, z))
+
+proof
+AllsI a (
+    AllsE a h1 (
+        ExisE b h1 (
+            AllsE b h2 (
+                ExisE c h2 (
+                    ExisI b (
+                        ExisI c (
+                            ConjI (
+                                Exact h1,
+                                Exact h2
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    )
+)

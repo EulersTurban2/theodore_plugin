@@ -1,0 +1,17 @@
+goal : (P & Q) <-> (Q & P)
+
+proof
+EqivI h (
+    ConjE h (
+        ConjI (
+            Exact h2,
+            Exact h1
+        )
+    ),
+    ConjE h (
+        ConjI (
+            Exact h2,
+            Exact h1
+        )
+    )
+)

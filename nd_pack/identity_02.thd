@@ -1,0 +1,7 @@
+assumption h1 : Eq(a, b)
+assumption h2 : ~(Eq(b, b) & Eq(b, c))
+
+goal : ~Eq(a, c)
+
+proof
+ToDo

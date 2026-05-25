@@ -1,0 +1,35 @@
+assumption hp : P -> (Q <-> R)
+
+goal : (P & Q) <-> (P & R)
+
+proof
+EqivI h (
+    ConjE h (
+        ConjI (
+            Exact h1,
+            ImplE hp (
+                Exact h1,
+                EqivE hp (
+                    ImplE hp1 (
+                        Exact h2,
+                        Exact hp1
+                    )
+                )
+            )
+        )
+    ),
+    ConjE h (
+        ConjI (
+            Exact h1,
+            ImplE hp (
+                Exact h1,
+                EqivE hp (
+                    ImplE hp2 (
+                        Exact h2,
+                        Exact hp2
+                    )
+                )
+            )
+        )
+    )
+)

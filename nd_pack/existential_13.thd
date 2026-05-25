@@ -1,0 +1,4 @@
+goal : (Ex x : R(x, x)) | (Ex x : (R(x, x) -> ~(Ex y : R(y, x))))
+
+proof
+ToDo

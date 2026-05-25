@@ -1,0 +1,10 @@
+goal : ~(P & ~P)
+
+proof
+NegI h (
+    ConjE h (
+        NegE h2 (
+            Exact h1
+        )
+    )
+)

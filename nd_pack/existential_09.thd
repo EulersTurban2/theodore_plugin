@@ -1,0 +1,14 @@
+assumption h1 : Ex x : Ex y : R(x, y)
+
+goal : Ex x : Ex y : R(y, x)
+
+proof
+ExisE a h1 (
+    ExisE b h1 (
+        ExisI b (
+            ExisI a (
+                Exact h1
+            )
+        )
+    )
+)

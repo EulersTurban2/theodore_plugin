@@ -1,0 +1,24 @@
+goal : ((P -> Q) <-> P) -> (P <-> Q)
+
+proof
+ImplI h (
+    EqivI hp (
+        EqivE h (
+            ImplE h2 (
+                Exact hp,
+                ImplE h2 (
+                    Exact hp,
+                    Exact h2
+                )
+            )
+        ),
+        EqivE h (
+            ImplE h1 (
+                ImplI hp2 (
+                    Exact hp
+                ),
+                Exact h1
+            )
+        )
+    )
+)

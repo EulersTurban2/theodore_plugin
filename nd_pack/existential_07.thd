@@ -1,0 +1,6 @@
+assumption h1 : P(a) -> Ex x : Q(x)
+
+goal : Ex x : (P(a) -> Q(x))
+
+proof
+ToDo

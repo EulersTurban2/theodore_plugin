@@ -1,0 +1,7 @@
+assumption h1 : Ex x : Ex y : R(x, y)
+assumption h2 : Ex x : All y : Eq(x, y)
+
+goal : All x : All y : R(x, y)
+
+proof
+ToDo

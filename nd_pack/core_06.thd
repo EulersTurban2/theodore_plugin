@@ -1,0 +1,11 @@
+-- NDPack Core 6: Qa, ~Qb |- a = a & ~a = b
+-- Theodore currently has no native identity formula or identity intro/elimination rules.
+-- The equality atoms below are encoded as ordinary predicates, so the proof is left open.
+
+assumption h1 : Q(a)
+assumption h2 : ~Q(b)
+
+goal : Eq(a, a) & ~Eq(a, b)
+
+proof
+ToDo

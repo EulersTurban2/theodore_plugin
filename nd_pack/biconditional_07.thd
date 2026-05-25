@@ -1,0 +1,17 @@
+assumption h1 : P -> Q
+
+goal : (P & Q) <-> P
+
+proof
+EqivI h (
+    ConjE h (
+        Exact h1
+    ),
+    ConjI (
+        Exact h,
+        ImplE h1 (
+            Exact h,
+            Exact h1
+        )
+    )
+)

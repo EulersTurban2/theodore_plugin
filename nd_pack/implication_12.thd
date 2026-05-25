@@ -1,0 +1,8 @@
+goal : (P & Q) -> P
+
+proof
+ImplI h (
+    ConjE h (
+        Exact h1
+    )
+)

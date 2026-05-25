@@ -1,0 +1,6 @@
+assumption h1 : All x : All y : ((P(x) & Eq(x, y)) -> ~Q(y))
+
+goal : All z : ~(P(z) & Q(z))
+
+proof
+ToDo

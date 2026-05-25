@@ -1,0 +1,4 @@
+goal : (All x : P(x, x)) <-> (All x : All y : (~P(x, y) -> ~Eq(x, y)))
+
+proof
+ToDo

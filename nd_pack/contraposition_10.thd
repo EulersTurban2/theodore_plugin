@@ -1,0 +1,6 @@
+-- Metatheory task: replace ImplI with contraposition and NegI.
+
+goal : True
+
+proof
+ToDo

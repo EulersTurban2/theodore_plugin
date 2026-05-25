@@ -1,0 +1,21 @@
+assumption h1 : All x : (P(x, x) | (All y : Q(x, y)))
+
+goal : All x : ((Ex y : P(x, y)) | Q(x, x))
+
+proof
+AllsI a (
+    AllsE a h1 (
+        DisjE h1 (
+            DisjlI (
+                ExisI a (
+                    Exact h1
+                )
+            ),
+            DisjrI (
+                AllsE a h1 (
+                    Exact h1
+                )
+            )
+        )
+    )
+)

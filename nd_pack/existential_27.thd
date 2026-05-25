@@ -1,0 +1,6 @@
+assumption h1 : All x : All y : All z : (R(x, y) | (R(z, y) | R(z, x)))
+
+goal : Ex x : Ex y : All z : (R(z, x) | R(z, y))
+
+proof
+ToDo

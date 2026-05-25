@@ -1,0 +1,14 @@
+assumption h1 : All x : ~P(x)
+
+goal : ~(Ex x : P(x))
+
+proof
+NegI hex (
+    ExisE a hex (
+        AllsE a h1 (
+            NegE h1 (
+                Exact hex
+            )
+        )
+    )
+)

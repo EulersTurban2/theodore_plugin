@@ -1,0 +1,10 @@
+assumption h1 : P & ~P
+
+goal : Q
+
+proof
+ConjE h1 (
+    NegE h12 (
+        Exact h11
+    )
+)

@@ -1,0 +1,17 @@
+assumption h1 : All x : (P(x) -> Q(x))
+
+goal : (All y1 : P(y1)) -> (All y2 : Q(y2))
+
+proof
+ImplI hallp (
+    AllsI a (
+        AllsE a hallp (
+            AllsE a h1 (
+                ImplE h1 (
+                    Exact hallp,
+                    Exact h1
+                )
+            )
+        )
+    )
+)

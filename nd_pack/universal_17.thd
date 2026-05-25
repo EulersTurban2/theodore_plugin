@@ -1,0 +1,22 @@
+assumption h1 : ~(All x : ~(All y : R(y, x)))
+
+goal : All x : ~(All y : ~R(x, y))
+
+proof
+AllsI a (
+    NegI halln (
+        NegE h1 (
+            AllsI b (
+                NegI hallr (
+                    AllsE a halln (
+                        AllsE b hallr (
+                            NegE halln (
+                                Exact hallr
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    )
+)

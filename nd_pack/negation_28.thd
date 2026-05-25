@@ -1,0 +1,4 @@
+goal : ~(P & Q) <-> (~P | ~Q)
+
+proof
+ToDo

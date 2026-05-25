@@ -1,0 +1,14 @@
+assumption h1 : P | Q
+
+goal : (P -> Q) -> Q
+
+proof
+ImplI hpq (
+    DisjE h1 (
+        ImplE hpq (
+            Exact h1,
+            Exact hpq
+        ),
+        Exact h1
+    )
+)

@@ -1,0 +1,19 @@
+assumption h1 : All x : ((Ex y : P(y)) -> Q(x))
+
+goal : All x : Ex y : (P(y) -> Q(x))
+
+proof
+AllsI a (
+    ExisI a (
+        ImplI hp (
+            AllsE a h1 (
+                ImplE h1 (
+                    ExisI a (
+                        Exact hp
+                    ),
+                    Exact h1
+                )
+            )
+        )
+    )
+)

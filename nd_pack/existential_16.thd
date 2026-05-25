@@ -1,0 +1,14 @@
+assumption h1 : ~(Ex x : P(x))
+
+goal : All x : ~P(x)
+
+proof
+AllsI a (
+    NegI hp (
+        NegE h1 (
+            ExisI a (
+                Exact hp
+            )
+        )
+    )
+)

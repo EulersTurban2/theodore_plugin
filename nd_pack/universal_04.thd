@@ -1,0 +1,17 @@
+assumption h1 : (All x : P(x)) & (All y : Q(y))
+
+goal : All z : (P(z) & Q(z))
+
+proof
+ConjE h1 (
+    AllsI a (
+        ConjI (
+            AllsE a h11 (
+                Exact h11
+            ),
+            AllsE a h12 (
+                Exact h12
+            )
+        )
+    )
+)

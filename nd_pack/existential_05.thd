@@ -1,0 +1,19 @@
+assumption h1 : Ex x : (P(x) | Q(x))
+
+goal : (Ex y : P(y)) | (Ex z : Q(z))
+
+proof
+ExisE a h1 (
+    DisjE h1 (
+        DisjlI (
+            ExisI a (
+                Exact h1
+            )
+        ),
+        DisjrI (
+            ExisI a (
+                Exact h1
+            )
+        )
+    )
+)

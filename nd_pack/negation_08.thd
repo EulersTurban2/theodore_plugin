@@ -1,0 +1,21 @@
+assumption h1 : ~(P | Q)
+
+goal : ~P & ~Q
+
+proof
+ConjI (
+    NegI hp (
+        NegE h1 (
+            DisjlI (
+                Exact hp
+            )
+        )
+    ),
+    NegI hq (
+        NegE h1 (
+            DisjrI (
+                Exact hq
+            )
+        )
+    )
+)

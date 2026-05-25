@@ -1,0 +1,28 @@
+assumption h1 : P
+assumption h2 : (P <-> Q) <-> R
+
+goal : Q <-> R
+
+proof
+EqivI h (
+    EqivE h2 (
+        ImplE h21 (
+            EqivI hp (
+                Exact h,
+                Exact h1
+            ),
+            Exact h21
+        )
+    ),
+    EqivE h2 (
+        ImplE h22 (
+            Exact h,
+            EqivE h22 (
+                ImplE h221 (
+                    Exact h1,
+                    Exact h221
+                )
+            )
+        )
+    )
+)

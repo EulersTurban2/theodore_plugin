@@ -1,0 +1,14 @@
+goal : ~(Ex x : Ex y : (R(x, y) & ~R(x, y)))
+
+proof
+NegI h (
+    ExisE a h (
+        ExisE b h (
+            ConjE h (
+                NegE h2 (
+                    Exact h1
+                )
+            )
+        )
+    )
+)

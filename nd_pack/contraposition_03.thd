@@ -1,0 +1,6 @@
+-- Metatheory task: show any application of NegI can be replaced by a subproof without NegI.
+
+goal : True
+
+proof
+ToDo

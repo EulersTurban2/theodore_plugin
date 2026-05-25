@@ -1,0 +1,8 @@
+assumption h1 : All x : All y : (R(x, y) -> R(y, x))
+assumption h2 : All x : All y : All z : ((R(x, y) & R(y, z)) -> R(x, z))
+assumption h3 : All x : ~(All y : ~R(x, y))
+
+goal : All x : R(x, x)
+
+proof
+ToDo

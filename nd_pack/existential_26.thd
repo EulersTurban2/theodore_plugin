@@ -1,0 +1,6 @@
+assumption h1 : All x : (P(x) -> Ex y : R(y, x))
+
+goal : (Ex z : R(z, a)) | ~(All x : P(x))
+
+proof
+ToDo

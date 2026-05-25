@@ -1,0 +1,48 @@
+assumption hirr : All x : ~R(x, x)
+assumption htrans1 : All x : All y : All z : ((R(x, y) & R(y, z)) -> R(x, z))
+assumption htrans2 : All x : All y : All z : ((R(x, y) & R(y, z)) -> R(x, z))
+
+goal : All x : All y : All z : ~((R(x, y) & R(y, z)) & R(z, x))
+
+proof
+AllsI a (
+    AllsI b (
+        AllsI c (
+            NegI h (
+                ConjE h (
+                    ConjE h1 (
+                    AllsE a htrans1 (
+                        AllsE b htrans1 (
+                            AllsE c htrans1 (
+                                ImplE htrans1 (
+                                    ConjI (
+                                        Exact h11,
+                                        Exact h12
+                                    ),
+                                    AllsE a htrans2 (
+                                        AllsE c htrans2 (
+                                            AllsE a htrans2 (
+                                                ImplE htrans2 (
+                                                    ConjI (
+                                                        Exact htrans1,
+                                                        Exact h2
+                                                    ),
+                                                    AllsE a hirr (
+                                                        NegE hirr (
+                                                            Exact htrans2
+                                                        )
+                                                    )
+                                                )
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    )
+)
