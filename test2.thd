@@ -1,0 +1,27 @@
+assumption hirr : All x : ~R(x, x)
+assumption htrans1 : All x : All y : All z : ((R(x, y) & R(y, z)) -> R(x, z))
+assumption htrans2 : All x : All y : All z : ((R(x, y) & R(y, z)) -> R(x, z))
+
+macro APPLY_TRANS(X, Y, Z, H_RULE, HA, HB, REST) = AllsE X H_RULE ( AllsE Y H_RULE ( AllsE Z H_RULE ( ImplE H_RULE ( ConjI ( Exact HA, Exact HB ), REST ) ) ) )
+macro APPLY_IRR(X, H_RULE, H_FACT) = AllsE X H_RULE ( NegE H_RULE ( Exact H_FACT ) )
+
+goal : All x : All y : All z : ~((R(x, y) & R(y, z)) & R(z, x))
+
+proof
+AllsI a (
+    AllsI b (
+        AllsI c (
+            NegI h (
+                ConjE h (
+                    ConjE h1 (
+                        APPLY_TRANS(a, b, c, htrans1, h11, h12,
+                            APPLY_TRANS(a, c, a, htrans2, htrans1, h2,
+                                APPLY_IRR(a, hirr, htrans2)
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    )
+)

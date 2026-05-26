@@ -3,10 +3,12 @@ module Main where
 import Theodore
 import Lib
 
+import System.Environment (getArgs)
+
 main :: IO ()
 main = do
-    putStrLn "Enter the path to your .thd file:"
-    filePath <- getLine
+    args <- getArgs
+    let filePath = head args
     (assumptions, lemmas, proof, goal) <- readTheodoreFile filePath
 
     putStrLn "\nGoals:"
